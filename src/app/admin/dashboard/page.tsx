@@ -1,18 +1,19 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
-import { Activity, BarChart3, ListChecks, Users, Zap } from "lucide-react";
-import { mockDevices, mockPlaylists } from '@/data/mockData';
+import { Activity, BarChart3, ListChecks, Users, Zap, LibraryBig } from "lucide-react";
+import { mockDevices, mockPlaylists, availableContentItems } from '@/data/mockData';
 
 export default function DashboardPage() {
   const onlineDevices = mockDevices.filter(d => d.status === 'online').length;
   const totalDevices = mockDevices.length;
   const totalPlaylists = mockPlaylists.length;
+  const totalContentItems = availableContentItems.length;
 
   const quickStats = [
     { title: "Online Devices", value: `${onlineDevices} / ${totalDevices}`, icon: Zap, color: "text-green-500", description: "Currently active and connected." },
     { title: "Total Playlists", value: totalPlaylists, icon: ListChecks, color: "text-blue-500", description: "Available for scheduling." },
-    { title: "Content Items", value: "125", icon: BarChart3, color: "text-orange-500", description: "Across all playlists." }, // Mocked value
+    { title: "Content Items", value: totalContentItems, icon: LibraryBig, color: "text-orange-500", description: "In your media library." },
     { title: "System Health", value: "Optimal", icon: Activity, color: "text-teal-500", description: "All systems operational." },
   ];
 
@@ -57,14 +58,14 @@ export default function DashboardPage() {
               Create New Playlist
             </Button>
           </Link>
-          <Link href="/admin/devices" passHref legacyBehavior>
-            <Button variant="outline" className="w-full py-6 text-base font-headline">
-              View All Devices
+          <Link href="/admin/content/create" passHref legacyBehavior>
+            <Button variant="default" className="w-full py-6 text-base font-headline">
+              Add New Content
             </Button>
           </Link>
-           <Link href="/admin/playlists" passHref legacyBehavior>
-            <Button variant="secondary" className="w-full py-6 text-base font-headline">
-              Manage Playlists
+           <Link href="/admin/devices/register" passHref legacyBehavior>
+            <Button variant="default" className="w-full py-6 text-base font-headline">
+              Register New Device
             </Button>
           </Link>
         </CardContent>

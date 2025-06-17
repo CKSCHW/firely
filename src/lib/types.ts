@@ -1,6 +1,6 @@
 export interface ContentItem {
   id: string;
-  type: 'image' | 'video' | 'web';
+  type: 'image' | 'video' | 'web'; // For now, form will focus on 'image'
   url: string;
   duration: number; // in seconds
   title?: string;
@@ -11,7 +11,7 @@ export interface Playlist {
   id:string;
   name: string;
   description?: string;
-  items: ContentItem[]; // In a real app, these might be IDs, but for mock, full objects are fine.
+  items: ContentItem[]; 
   createdAt: string; // ISO date string
   updatedAt: string; // ISO date string
 }

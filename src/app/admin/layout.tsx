@@ -13,9 +13,9 @@ import {
 } from '@/components/ui/sidebar';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
-import { Bell, LayoutDashboard, ListMusic, LogOut, MonitorSmartphone, Settings, Tv2, ShieldQuestion } from 'lucide-react';
+import { Bell, LayoutDashboard, ListMusic, LogOut, MonitorSmartphone, Settings, Tv2, ShieldQuestion, LibraryBig } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
-import { Toaster } from '@/components/ui/toaster'; // Ensure Toaster is here if not in root
+import { Toaster } from '@/components/ui/toaster'; 
 
 type NavItem = {
   href: string;
@@ -26,19 +26,18 @@ type NavItem = {
 
 const navItems: NavItem[] = [
   { href: '/admin/dashboard', label: 'Dashboard', icon: LayoutDashboard },
-  { href: '/admin/playlists', label: 'Playlists', icon: ListMusic, badge: '3' },
-  { href: '/admin/devices', label: 'Devices', icon: MonitorSmartphone, badge: '1 new' },
+  { href: '/admin/playlists', label: 'Playlists', icon: ListMusic },
+  { href: '/admin/devices', label: 'Devices', icon: MonitorSmartphone },
+  { href: '/admin/content', label: 'Content Library', icon: LibraryBig },
 ];
 
 const secondaryNavItems: NavItem[] = [
-    { href: '#', label: 'Settings', icon: Settings }, // Placeholder href
-    { href: '#', label: 'Help & Support', icon: ShieldQuestion }, // Placeholder href
+    { href: '#', label: 'Settings', icon: Settings }, 
+    { href: '#', label: 'Help & Support', icon: ShieldQuestion }, 
 ];
 
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
-  // This component itself is a Server Component.
-  // Components it imports (SidebarProvider, etc.) are Client Components.
   return (
     <SidebarProvider defaultOpen={true}>
       <Sidebar collapsible="icon" side="left" variant="sidebar">
@@ -112,9 +111,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       </Sidebar>
       <SidebarInset>
         <header className="sticky top-0 z-30 flex h-14 items-center gap-4 border-b bg-background/80 backdrop-blur-sm px-4 sm:px-6">
-          <SidebarTrigger className="md:hidden" /> {/* Mobile trigger */}
+          <SidebarTrigger className="md:hidden" /> 
           <div className="flex-1">
-            {/* Breadcrumbs or page title could go here */}
             <h1 className="text-lg font-headline font-semibold text-primary">Admin Portal</h1>
           </div>
           <Button variant="ghost" size="icon" className="rounded-full">
@@ -125,8 +123,6 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         <main className="flex-1 p-4 md:p-6 bg-secondary/50 min-h-[calc(100vh-3.5rem)]">
           {children}
         </main>
-        {/* Toaster might be in the root layout, if so, remove from here */}
-        {/* <Toaster />  */} 
       </SidebarInset>
     </SidebarProvider>
   );
