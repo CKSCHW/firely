@@ -8,7 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { PlusCircle, Edit3, Trash2, Image as ImageIcon, LibraryBig, ExternalLink } from 'lucide-react';
+import { PlusCircle, Edit3, Trash2, Image as ImageIcon, LibraryBig, ExternalLink, Video, Globe, FileText } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useRouter } from 'next/navigation';
 import {
@@ -24,6 +24,22 @@ import {
 } from "@/components/ui/alert-dialog";
 import type { ContentItem } from '@/lib/types';
 
+const TypeIcon = ({ type }: { type: ContentItem['type'] }) => {
+  switch (type) {
+    case 'image':
+      return <ImageIcon className="h-5 w-5 text-muted-foreground" />;
+    case 'video':
+      return <Video className="h-5 w-5 text-muted-foreground" />;
+    case 'web':
+      return <Globe className="h-5 w-5 text-muted-foreground" />;
+    case 'pdf':
+      return <FileText className="h-5 w-5 text-muted-foreground" />;
+    default:
+      return <ExternalLink className="h-5 w-5 text-muted-foreground" />;
+  }
+};
+
+
 export default function ContentLibraryPage() {
   const { toast } = useToast();
   const router = useRouter();
@@ -35,7 +51,7 @@ export default function ContentLibraryPage() {
         title: "Content Item Deleted",
         description: `Item "${itemTitle || itemId}" has been removed.`,
       });
-      router.refresh(); // Re-fetch data and re-render
+      router.refresh(); 
     } else {
       toast({
         title: "Deletion Failed",
@@ -45,11 +61,6 @@ export default function ContentLibraryPage() {
     }
   };
   
-  // This component needs to be a client component if it uses hooks like useToast and useRouter directly,
-  // or if event handlers like handleDelete modify state that should trigger re-renders.
-  // The data (availableContentItems) is imported directly, so it's "live" if mutated by mockData functions.
-  // router.refresh() is essential to tell Next.js to re-run Server Components and get fresh data.
-
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
@@ -106,7 +117,7 @@ export default function ContentLibraryPage() {
                         </div>
                       ) : (
                         <div className="w-16 h-10 rounded bg-muted flex items-center justify-center border">
-                          <ExternalLink className="h-5 w-5 text-muted-foreground" />
+                          <TypeIcon type={item.type} />
                         </div>
                       )}
                     </TableCell>

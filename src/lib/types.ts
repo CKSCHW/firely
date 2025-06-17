@@ -1,6 +1,6 @@
 export interface ContentItem {
   id: string;
-  type: 'image' | 'video' | 'web'; // For now, form will focus on 'image'
+  type: 'image' | 'video' | 'web' | 'pdf';
   url: string;
   duration: number; // in seconds
   title?: string;

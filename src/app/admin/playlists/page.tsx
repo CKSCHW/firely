@@ -1,3 +1,4 @@
+
 import Link from 'next/link';
 import { mockPlaylists } from '@/data/mockData';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
@@ -66,9 +67,11 @@ export default function PlaylistsPage() {
                 </div>
                 <div className="pt-2">
                   <h4 className="font-semibold text-xs mb-1 text-muted-foreground uppercase tracking-wider">Content Types:</h4>
-                  {[...new Set(playlist.items.map(item => item.type))].map(type => (
-                    <Badge key={type} variant="secondary" className="mr-1 mb-1 capitalize font-body">{type}</Badge>
-                  ))}
+                  <div className="flex flex-wrap gap-1">
+                    {[...new Set(playlist.items.map(item => item.type))].map(type => (
+                      <Badge key={type} variant="secondary" className="capitalize font-body">{type}</Badge>
+                    ))}
+                  </div>
                 </div>
               </CardContent>
               <CardFooter className="flex justify-end gap-2 border-t pt-4">

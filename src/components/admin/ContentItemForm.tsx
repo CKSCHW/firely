@@ -26,7 +26,7 @@ import { useEffect, useState } from "react";
 
 const contentItemFormSchema = z.object({
   title: z.string().min(3, { message: "Title must be at least 3 characters." }),
-  type: z.enum(["image", "video", "web"], {
+  type: z.enum(["image", "video", "web", "pdf"], {
     required_error: "You need to select a content type.",
   }),
   url: z.string().url({ message: "Please enter a valid URL." }),
@@ -165,12 +165,13 @@ export default function ContentItemForm({ contentId }: ContentItemFormProps) {
                 </FormControl>
                 <SelectContent>
                   <SelectItem value="image">Image</SelectItem>
-                  <SelectItem value="video" disabled>Video (coming soon)</SelectItem>
-                  <SelectItem value="web" disabled>Web Page (coming soon)</SelectItem>
+                  <SelectItem value="video">Video</SelectItem>
+                  <SelectItem value="web">Web Page</SelectItem>
+                  <SelectItem value="pdf">PDF Document</SelectItem>
                 </SelectContent>
               </Select>
               <FormDescription className="font-body">
-                Currently, only 'Image' type is fully supported for creation.
+                Select the type of content you are adding.
               </FormDescription>
               <FormMessage />
             </FormItem>
@@ -184,10 +185,10 @@ export default function ContentItemForm({ contentId }: ContentItemFormProps) {
             <FormItem>
               <FormLabel className="font-headline">URL</FormLabel>
               <FormControl>
-                <Input placeholder="https://example.com/image.png or https://placehold.co/..." {...field} className="font-body"/>
+                <Input placeholder="https://example.com/resource.png" {...field} className="font-body"/>
               </FormControl>
               <FormDescription className="font-body">
-                Direct link to the image, video, or web page. For placeholders, use e.g., https://placehold.co/600x400.png
+                Direct link to the image, video, web page, or PDF document. For image placeholders, use e.g., https://placehold.co/600x400.png
               </FormDescription>
               <FormMessage />
             </FormItem>
@@ -196,7 +197,7 @@ export default function ContentItemForm({ contentId }: ContentItemFormProps) {
         
         {previewUrl && form.getValues("type") === "image" && (
           <div className="space-y-2">
-            <FormLabel className="font-headline">Preview</FormLabel>
+            <FormLabel className="font-headline">Image Preview</FormLabel>
             <div className="relative w-full max-w-md h-64 rounded border bg-muted overflow-hidden">
                <Image src={previewUrl} alt="Content preview" layout="fill" objectFit="contain" unoptimized={previewUrl.startsWith("https://placehold.co")} />
             </div>
@@ -226,12 +227,12 @@ export default function ContentItemForm({ contentId }: ContentItemFormProps) {
           name="dataAiHint"
           render={({ field }) => (
             <FormItem>
-              <FormLabel className="font-headline">AI Hint (Optional)</FormLabel>
+              <FormLabel className="font-headline">AI Hint (Optional for Images)</FormLabel>
               <FormControl>
                 <Input placeholder="e.g., nature landscape" {...field} className="font-body"/>
               </FormControl>
               <FormDescription className="font-body">
-                One or two keywords for AI image search (e.g., 'office building', 'abstract pattern'). Used if this is a placeholder.
+                One or two keywords for AI image search (e.g., 'office building', 'abstract pattern'). Used if this is a placeholder image.
               </FormDescription>
               <FormMessage />
             </FormItem>

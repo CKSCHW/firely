@@ -8,6 +8,9 @@ export let availableContentItems: ContentItem[] = [
   { id: 'content-5', type: 'image', url: 'https://placehold.co/1920x1080/9C27B0/FFFFFF?text=Upcoming+Purple+Event', duration: 8, title: 'Don\'t Miss Purple Event', dataAiHint: 'upcoming event' },
   { id: 'content-6', type: 'image', url: 'https://placehold.co/1920x1080/00BCD4/FFFFFF?text=Cyan+Services+Info', duration: 10, title: 'Our Cyan Services', dataAiHint: 'service information' },
   { id: 'content-7', type: 'image', url: 'https://placehold.co/1920x1080/FFEB3B/000000?text=Yellow+Highlights', duration: 9, title: 'Yellow Highlights of the Week', dataAiHint: 'weekly summary' },
+  { id: 'content-8', type: 'video', url: 'https://storage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4', duration: 30, title: 'Big Buck Bunny Promo', dataAiHint: 'animated video' },
+  { id: 'content-9', type: 'web', url: 'https://example.com', duration: 20, title: 'Example Company Website', dataAiHint: 'web page' },
+  { id: 'content-10', type: 'pdf', url: 'https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf', duration: 15, title: 'Sample PDF Document', dataAiHint: 'document info' },
 ];
 
 export let aiAvailableContent: AvailableContent[] = availableContentItems.map(item => ({
@@ -27,7 +30,7 @@ export let mockPlaylists: Playlist[] = [
     id: 'playlist-1',
     name: 'Morning Loop',
     description: 'Content for morning display hours. Includes news and promotions.',
-    items: [availableContentItems[0], availableContentItems[1], availableContentItems[5]].filter(Boolean),
+    items: [availableContentItems[0], availableContentItems[1], availableContentItems[5], availableContentItems[7]].filter(Boolean),
     createdAt: new Date(Date.now() - 1000 * 60 * 60 * 48).toISOString(), // 2 days ago
     updatedAt: new Date(Date.now() - 1000 * 60 * 60 * 24).toISOString(), // 1 day ago
   },
@@ -35,7 +38,7 @@ export let mockPlaylists: Playlist[] = [
     id: 'playlist-2',
     name: 'Evening Specials',
     description: 'Promotions and event highlights for the evening.',
-    items: [availableContentItems[2], availableContentItems[3], availableContentItems[4], availableContentItems[6]].filter(Boolean),
+    items: [availableContentItems[2], availableContentItems[3], availableContentItems[4], availableContentItems[6], availableContentItems[9]].filter(Boolean),
     createdAt: new Date(Date.now() - 1000 * 60 * 60 * 72).toISOString(), // 3 days ago
     updatedAt: new Date().toISOString(),
   },
@@ -43,7 +46,7 @@ export let mockPlaylists: Playlist[] = [
     id: 'playlist-3',
     name: 'Weekend Showcase',
     description: 'Special content for weekend viewers.',
-    items: [availableContentItems[0], availableContentItems[2], availableContentItems[4], availableContentItems[5], availableContentItems[6]].filter(Boolean),
+    items: [availableContentItems[0], availableContentItems[2], availableContentItems[4], availableContentItems[5], availableContentItems[6], availableContentItems[8]].filter(Boolean),
     createdAt: new Date(Date.now() - 1000 * 60 * 60 * 24 * 5).toISOString(), // 5 days ago
     updatedAt: new Date(Date.now() - 1000 * 60 * 60 * 2).toISOString(), // 2 hours ago
   },
