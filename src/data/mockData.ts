@@ -72,3 +72,16 @@ export const mockDevices: DisplayDevice[] = [
     currentPlaylistId: 'playlist-1'
   }
 ];
+
+// Function to add a new device to the mock data
+export function addMockDevice(name: string): DisplayDevice {
+  const newDevice: DisplayDevice = {
+    id: `display-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+    name,
+    status: 'online', // New devices default to online
+    lastSeen: new Date().toISOString(),
+    currentPlaylistId: undefined, // No playlist assigned initially
+  };
+  mockDevices.push(newDevice);
+  return newDevice;
+}

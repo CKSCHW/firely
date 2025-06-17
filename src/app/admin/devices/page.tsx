@@ -17,10 +17,12 @@ export default function DevicesPage() {
             Monitor and manage your connected display devices.
           </p>
         </div>
-        <Button variant="default" className="font-headline" disabled>
-            <PlusCircle className="mr-2 h-5 w-5" />
-            Register New Device
-        </Button>
+        <Link href="/admin/devices/register" passHref legacyBehavior>
+          <Button variant="default" className="font-headline">
+              <PlusCircle className="mr-2 h-5 w-5" />
+              Register New Device
+          </Button>
+        </Link>
       </div>
 
       <Card className="shadow-md">
