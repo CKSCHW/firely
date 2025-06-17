@@ -15,7 +15,7 @@ export const aiAvailableContent: AvailableContent[] = availableContentItems.map(
   name: item.title || item.id,
 }));
 
-export const mockPlaylists: Playlist[] = [
+export let mockPlaylists: Playlist[] = [
   {
     id: 'playlist-1',
     name: 'Morning Loop',
@@ -84,4 +84,35 @@ export function addMockDevice(name: string): DisplayDevice {
   };
   mockDevices.push(newDevice);
   return newDevice;
+}
+
+// Function to add a new playlist
+export function addMockPlaylist(name: string, description: string | undefined, itemIds: string[]): Playlist {
+  const newPlaylist: Playlist = {
+    id: `playlist-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+    name,
+    description,
+    items: itemIds.map(id => availableContentItems.find(item => item.id === id)).filter(Boolean) as ContentItem[],
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  };
+  mockPlaylists.push(newPlaylist);
+  return newPlaylist;
+}
+
+// Function to update an existing playlist
+export function updateMockPlaylist(id: string, name: string, description: string | undefined, itemIds: string[]): Playlist | undefined {
+  const playlistIndex = mockPlaylists.findIndex(p => p.id === id);
+  if (playlistIndex === -1) {
+    return undefined;
+  }
+  const updatedPlaylist: Playlist = {
+    ...mockPlaylists[playlistIndex],
+    name,
+    description,
+    items: itemIds.map(itemId => availableContentItems.find(item => item.id === itemId)).filter(Boolean) as ContentItem[],
+    updatedAt: new Date().toISOString(),
+  };
+  mockPlaylists[playlistIndex] = updatedPlaylist;
+  return updatedPlaylist;
 }

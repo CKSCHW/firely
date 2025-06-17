@@ -2,7 +2,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
-// import PlaylistForm from "@/components/admin/PlaylistForm"; // To be created
+import PlaylistForm from "@/components/admin/PlaylistForm"; 
 
 export default function CreatePlaylistPage() {
   return (
@@ -29,15 +29,12 @@ export default function CreatePlaylistPage() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          {/* <PlaylistForm /> */}
-          <p className="font-body text-center py-8 text-muted-foreground">
-            Playlist form component will be implemented here.
-          </p>
-          <div className="mt-6 flex justify-end gap-2">
-            <Button variant="outline" asChild>
+          <PlaylistForm />
+          <div className="mt-8 flex justify-end gap-3 pt-4 border-t">
+            <Button variant="outline" asChild className="font-body">
               <Link href="/admin/playlists">Cancel</Link>
             </Button>
-            <Button type="submit" form="playlist-form" className="font-headline" disabled>Save Playlist</Button> {/* Submit for the form */}
+            <Button type="submit" form="playlist-form" className="font-headline">Save Playlist</Button>
           </div>
         </CardContent>
       </Card>
