@@ -2,7 +2,18 @@
 import type { Playlist, DisplayDevice, ContentItem, AvailableContent, ScheduleEntry } from '@/lib/types';
 import { v4 as uuidv4 } from 'uuid';
 import { db, isFirebaseConfigured } from '@/lib/firebase'; // Import Firestore instance
-import { collection, doc, setDoc, getDocs, deleteDoc, writeBatch, query, getDoc } from 'firebase/firestore';
+import { collection, doc, setDoc, getDocs, deleteDoc, writeBatch, query } from 'firebase/firestore';
+
+// Helper function to remove undefined properties from an object
+function removeUndefinedProps(obj: any): any {
+  const newObj: any = {};
+  for (const key in obj) {
+    if (obj[key] !== undefined) {
+      newObj[key] = obj[key];
+    }
+  }
+  return newObj;
+}
 
 // Default data (used to seed Firestore if empty, or as fallback if Firebase isn't configured)
 const defaultContentItems: ContentItem[] = [
@@ -18,12 +29,12 @@ const defaultContentItems: ContentItem[] = [
   { id: 'content-10', type: 'pdf', url: 'https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf', duration: 15, title: 'Sample PDF Document', dataAiHint: 'document info' },
 ];
 
-const defaultPlaylists: Playlist[] = [
+const defaultPlaylistsData: Omit<Playlist, 'items'> & { itemIds: string[] }[] = [
   {
     id: 'playlist-1',
     name: 'Morning Loop',
     description: 'Content for morning display hours. Includes news and promotions.',
-    items: [defaultContentItems[0], defaultContentItems[1], defaultContentItems[5], defaultContentItems[7]].filter(Boolean).map(ci => defaultContentItems.find(item => item.id === ci.id) as ContentItem),
+    itemIds: ['content-1', 'content-2', 'content-6', 'content-8'],
     createdAt: new Date(Date.now() - 1000 * 60 * 60 * 48).toISOString(),
     updatedAt: new Date(Date.now() - 1000 * 60 * 60 * 24).toISOString(),
   },
@@ -31,11 +42,17 @@ const defaultPlaylists: Playlist[] = [
     id: 'playlist-2',
     name: 'Evening Specials',
     description: 'Promotions and event highlights for the evening.',
-    items: [defaultContentItems[2], defaultContentItems[3], defaultContentItems[4], defaultContentItems[6], defaultContentItems[9]].filter(Boolean).map(ci => defaultContentItems.find(item => item.id === ci.id) as ContentItem),
+    itemIds: ['content-3', 'content-4', 'content-5', 'content-7', 'content-10'],
     createdAt: new Date(Date.now() - 1000 * 60 * 60 * 72).toISOString(),
     updatedAt: new Date().toISOString(),
   },
 ];
+
+const defaultPlaylists: Playlist[] = defaultPlaylistsData.map(p => ({
+    ...p,
+    items: p.itemIds.map(id => defaultContentItems.find(ci => ci.id === id)).filter(Boolean) as ContentItem[]
+}));
+
 
 const defaultDevices: DisplayDevice[] = [
   {
@@ -118,7 +135,14 @@ export async function ensureDataLoaded() {
           const batch = writeBatch(db);
           JSON.parse(JSON.stringify(defaultData)).forEach((item: T) => {
             const docRef = doc(db, collectionName, item.id);
-            batch.set(docRef, item);
+            // For playlists, ensure items are plain objects if they contain nested objects like ContentItem
+            let dataToSet = item;
+            if (collectionName === 'playlists' && (item as any).items) {
+                dataToSet = { ...item, items: (item as any).items.map((subItem: any) => removeUndefinedProps({...subItem})) };
+            } else {
+                dataToSet = removeUndefinedProps({...item});
+            }
+            batch.set(docRef, dataToSet, dataToSet);
           });
           await batch.commit();
           inMemoryArray.splice(0, inMemoryArray.length, ...JSON.parse(JSON.stringify(defaultData)));
@@ -145,18 +169,13 @@ export async function ensureDataLoaded() {
         loadCollection<Playlist>('playlists', defaultPlaylists, mockPlaylists),
         loadCollection<DisplayDevice>('devices', defaultDevices, mockDevices),
       ]);
-      isDataLoaded = true; // Set this only after all collections are attempted
+      isDataLoaded = true; 
       reSyncAiAvailableContent();
       console.log('Initial data load from Firestore complete.');
     } catch (error) {
         console.error('Error during parallel data loading from Firestore:', error);
-        // If Promise.all fails, isDataLoaded might not be true, potentially allowing retry.
-        // Or, consider setting isDataLoaded = true anyway to prevent retries if fallback data is used for all.
-        // For now, let's assume if any fails, it's caught by individual loadCollection errors.
-        // If not, isDataLoaded would remain false, leading to retries on next call.
-        // To be safe, let's set isDataLoaded true here too, since fallbacks are in place.
         isDataLoaded = true; 
-        reSyncAiAvailableContent(); // Ensure this runs even on error if fallback data is used.
+        reSyncAiAvailableContent(); 
     }
   };
 
@@ -165,7 +184,6 @@ export async function ensureDataLoaded() {
   try {
     await loadingPromise;
   } catch (error) {
-    // This catch is mostly for unexpected errors within doLoad not caught by inner try-catches
     console.error("Unhandled error during ensureDataLoaded execution:", error);
   } finally {
     loadingPromise = null;
@@ -181,12 +199,12 @@ export async function addMockDevice(name: string): Promise<DisplayDevice> {
     name,
     status: 'online', 
     lastSeen: new Date().toISOString(),
-    currentPlaylistId: undefined, 
+    // currentPlaylistId will be undefined by default if not assigned
     schedule: [],
   };
   if (isFirebaseConfigured && db) {
     try {
-      await setDoc(doc(db, 'devices', newDevice.id), newDevice);
+      await setDoc(doc(db, 'devices', newDevice.id), removeUndefinedProps(newDevice));
     } catch (error) {
       console.error("Error adding device to Firestore: ", error);
       throw error;
@@ -204,16 +222,20 @@ export async function updateMockDevice(deviceId: string, updates: Partial<Omit<D
     return undefined;
   }
   
-  const updatedDeviceData = {
+  const updatedDeviceData: DisplayDevice = {
     ...mockDevices[deviceIndex],
     name: updates.name ?? mockDevices[deviceIndex].name,
     currentPlaylistId: updates.currentPlaylistId, 
     schedule: updates.schedule ?? mockDevices[deviceIndex].schedule, 
+    // Retain original status and lastSeen unless explicitly updated, which they are not here.
+    status: mockDevices[deviceIndex].status,
+    lastSeen: mockDevices[deviceIndex].lastSeen,
   };
 
   if (isFirebaseConfigured && db) {
     try {
-      await setDoc(doc(db, 'devices', deviceId), updatedDeviceData, { merge: true });
+      // Use merge: true to only update specified fields and not overwrite others like status/lastSeen unintentionally
+      await setDoc(doc(db, 'devices', deviceId), removeUndefinedProps(updates), { merge: true });
     } catch (error) {
       console.error("Error updating device in Firestore: ", error);
       throw error;
@@ -246,14 +268,14 @@ export async function addMockPlaylist(name: string, description: string | undefi
     id: `playlist-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
     name,
     description,
-    items: itemIds.map(id => availableContentItems.find(item => item.id === id)).filter(Boolean) as ContentItem[],
+    items: itemIds.map(id => availableContentItems.find(item => item.id === id)).filter(Boolean).map(ci => ({...ci})) as ContentItem[],
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   };
   if (isFirebaseConfigured && db) {
     try {
-      const firestorePlaylist = { ...newPlaylist, items: newPlaylist.items.map(item => ({...item})) };
-      await setDoc(doc(db, 'playlists', newPlaylist.id), firestorePlaylist);
+      const firestorePlaylist = { ...newPlaylist, items: newPlaylist.items.map(item => removeUndefinedProps({...item})) };
+      await setDoc(doc(db, 'playlists', newPlaylist.id), removeUndefinedProps(firestorePlaylist));
     } catch (error) {
       console.error("Error adding playlist to Firestore: ", error);
       throw error;
@@ -273,14 +295,15 @@ export async function updateMockPlaylist(playlistId: string, name: string, descr
     ...mockPlaylists[playlistIndex],
     name,
     description,
-    items: itemIds.map(itemId => availableContentItems.find(item => item.id === itemId)).filter(Boolean) as ContentItem[],
+    items: itemIds.map(itemId => availableContentItems.find(item => item.id === itemId)).filter(Boolean).map(ci => ({...ci})) as ContentItem[],
     updatedAt: new Date().toISOString(),
   };
 
   if (isFirebaseConfigured && db) {
     try {
-      const firestorePlaylist = { ...updatedPlaylistData, items: updatedPlaylistData.items.map(item => ({...item})) };
-      await setDoc(doc(db, 'playlists', playlistId), firestorePlaylist, { merge: true });
+      const firestorePlaylist = { ...updatedPlaylistData, items: updatedPlaylistData.items.map(item => removeUndefinedProps({...item})) };
+      // Use merge: true for updates
+      await setDoc(doc(db, 'playlists', playlistId), removeUndefinedProps(firestorePlaylist), { merge: true });
     } catch (error) {
       console.error("Error updating playlist in Firestore: ", error);
       throw error;
@@ -298,7 +321,7 @@ export async function addMockContentItem(itemData: Omit<ContentItem, 'id'>): Pro
   };
   if (isFirebaseConfigured && db) {
     try {
-      await setDoc(doc(db, 'contentItems', newItem.id), newItem);
+      await setDoc(doc(db, 'contentItems', newItem.id), removeUndefinedProps(newItem));
     } catch (error) {
       console.error("Error adding content item to Firestore: ", error);
       throw error;
@@ -315,11 +338,12 @@ export async function updateMockContentItem(contentId: string, itemData: Partial
   if (itemIndex === -1) {
     return undefined;
   }
-  const updatedItemData = { ...availableContentItems[itemIndex], ...itemData, id: contentId };
+  const updatedItemData: ContentItem = { ...availableContentItems[itemIndex], ...itemData, id: contentId };
 
   if (isFirebaseConfigured && db) {
     try {
-      await setDoc(doc(db, 'contentItems', contentId), updatedItemData, { merge: true });
+      // Use merge: true for updates
+      await setDoc(doc(db, 'contentItems', contentId), removeUndefinedProps(itemData), { merge: true }); 
       
       const playlistsSnapshot = await getDocs(collection(db, "playlists"));
       const batch = writeBatch(db);
@@ -330,13 +354,14 @@ export async function updateMockContentItem(contentId: string, itemData: Partial
         const updatedItems = playlist.items.map(item => {
           if (item.id === contentId) {
             playlistModifiedThisIteration = true;
-            return updatedItemData;
+            // Ensure the item being put into the playlist is also cleaned
+            return removeUndefinedProps({...updatedItemData}); 
           }
-          return item;
+          return removeUndefinedProps({...item});
         });
         if (playlistModifiedThisIteration) {
           wasAnyPlaylistModified = true;
-          batch.update(doc(db, "playlists", playlist.id), { items: updatedItems.map(item => ({...item})), updatedAt: new Date().toISOString() });
+          batch.update(doc(db, "playlists", playlist.id), { items: updatedItems, updatedAt: new Date().toISOString() });
         }
       });
       if (wasAnyPlaylistModified) {
@@ -375,10 +400,10 @@ export async function deleteMockContentItem(contentId: string): Promise<boolean>
       playlistsSnapshot.forEach(playlistDoc => {
         const playlist = playlistDoc.data() as Playlist;
         const originalItemCount = playlist.items.length;
-        const updatedItems = playlist.items.filter(item => item.id !== contentId);
+        const updatedItems = playlist.items.filter(item => item.id !== contentId).map(item => removeUndefinedProps({...item}));
         if (updatedItems.length < originalItemCount) {
            wasAnyPlaylistModified = true;
-           batch.update(doc(db, "playlists", playlist.id), { items: updatedItems.map(item => ({...item})), updatedAt: new Date().toISOString() });
+           batch.update(doc(db, "playlists", playlist.id), { items: updatedItems, updatedAt: new Date().toISOString() });
         }
       });
       if (wasAnyPlaylistModified) {
@@ -398,3 +423,5 @@ export async function deleteMockContentItem(contentId: string): Promise<boolean>
   reSyncAiAvailableContent();
   return true;
 }
+
+
