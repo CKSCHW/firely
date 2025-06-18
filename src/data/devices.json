@@ -1,0 +1,31 @@
+
+[
+  {
+    "id": "display-101",
+    "name": "Lobby Screen 1 (Main Entrance)",
+    "status": "online",
+    "lastSeen": "2024-07-24T12:00:00.000Z",
+    "currentPlaylistId": "playlist-1"
+  },
+  {
+    "id": "display-102",
+    "name": "Cafeteria Screen (East Wall)",
+    "status": "offline",
+    "lastSeen": "2024-07-24T09:00:00.000Z",
+    "currentPlaylistId": "playlist-2"
+  },
+  {
+    "id": "display-103",
+    "name": "Meeting Room A Display",
+    "status": "online",
+    "lastSeen": "2024-07-24T11:55:00.000Z",
+    "currentPlaylistId": "playlist-3"
+  },
+  {
+    "id": "sample-display-1",
+    "name": "Sample Demo Display",
+    "status": "online",
+    "lastSeen": "2024-07-24T12:00:00.000Z",
+    "currentPlaylistId": "playlist-1"
+  }
+]

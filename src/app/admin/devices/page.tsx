@@ -1,13 +1,38 @@
-import { mockDevices } from '@/data/mockData';
+
+"use client";
+import { mockDevices, ensureDataLoaded } from '@/data/mockData';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
-import { MonitorSmartphone, Wifi, WifiOff, Clock, Edit, Trash2, PlusCircle } from 'lucide-react';
+import { MonitorSmartphone, Wifi, WifiOff, Clock, Edit, Trash2, PlusCircle, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
 import { formatDistanceToNow } from 'date-fns';
+import { useEffect, useState } from 'react';
+import type { DisplayDevice } from '@/lib/types';
 
 export default function DevicesPage() {
+  const [isLoading, setIsLoading] = useState(true);
+  const [devices, setDevices] = useState<DisplayDevice[]>([]);
+
+  useEffect(() => {
+    async function loadData() {
+      setIsLoading(true);
+      await ensureDataLoaded();
+      setDevices([...mockDevices]);
+      setIsLoading(false);
+    }
+    loadData();
+  }, []);
+
+  if (isLoading) {
+    return (
+      <div className="flex justify-center items-center min-h-[calc(100vh-200px)]">
+        <Loader2 className="h-12 w-12 animate-spin text-primary" />
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
@@ -33,7 +58,7 @@ export default function DevicesPage() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          {mockDevices.length === 0 ? (
+          {devices.length === 0 ? (
             <div className="text-center py-12">
               <MonitorSmartphone className="mx-auto h-16 w-16 text-muted-foreground mb-4" />
               <h3 className="font-headline text-2xl">No Devices Registered</h3>
@@ -53,7 +78,7 @@ export default function DevicesPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {mockDevices.map((device) => (
+                {devices.map((device) => (
                   <TableRow key={device.id} className="font-body hover:bg-muted/50">
                     <TableCell>
                       <Badge variant={device.status === 'online' ? 'default' : 'destructive'} className="capitalize whitespace-nowrap">
@@ -64,7 +89,9 @@ export default function DevicesPage() {
                     <TableCell className="font-medium text-primary">{device.name}</TableCell>
                     <TableCell className="hidden md:table-cell text-muted-foreground">
                       {device.currentPlaylistId ? 
-                        <Link href={`/admin/playlists/${device.currentPlaylistId}/edit`} className="hover:underline">{device.currentPlaylistId}</Link> 
+                        <Link href={`/admin/playlists/${device.currentPlaylistId}/edit`} className="hover:underline">{
+                          mockPlaylists.find(p=>p.id === device.currentPlaylistId)?.name || device.currentPlaylistId
+                        }</Link> 
                         : 'N/A'}
                     </TableCell>
                     <TableCell className="hidden lg:table-cell text-muted-foreground">

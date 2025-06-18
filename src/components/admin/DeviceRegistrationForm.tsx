@@ -17,6 +17,8 @@ import {
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { addMockDevice } from "@/data/mockData";
+import { useState } from "react";
+import { Loader2 } from "lucide-react";
 
 const formSchema = z.object({
   deviceName: z.string().min(3, {
@@ -27,6 +29,7 @@ const formSchema = z.object({
 export default function DeviceRegistrationForm() {
   const router = useRouter();
   const { toast } = useToast();
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -35,15 +38,16 @@ export default function DeviceRegistrationForm() {
     },
   });
 
-  function onSubmit(values: z.infer<typeof formSchema>) {
+  async function onSubmit(values: z.infer<typeof formSchema>) {
+    setIsSubmitting(true);
     try {
-      addMockDevice(values.deviceName);
+      await addMockDevice(values.deviceName);
       toast({
         title: "Device Registered",
         description: `Device "${values.deviceName}" has been successfully registered.`,
       });
       router.push("/admin/devices");
-      router.refresh(); // Refresh server components on the target page
+      router.refresh(); 
     } catch (error) {
       let message = "Could not register the new device. Please try again.";
       if (error instanceof Error) {
@@ -54,6 +58,8 @@ export default function DeviceRegistrationForm() {
         description: message,
         variant: "destructive",
       });
+    } finally {
+      setIsSubmitting(false);
     }
   }
 
@@ -67,7 +73,7 @@ export default function DeviceRegistrationForm() {
             <FormItem>
               <FormLabel>Device Name</FormLabel>
               <FormControl>
-                <Input placeholder="e.g., Lobby Screen Main" {...field} />
+                <Input placeholder="e.g., Lobby Screen Main" {...field} disabled={isSubmitting} />
               </FormControl>
               <FormMessage />
             </FormItem>
@@ -79,11 +85,13 @@ export default function DeviceRegistrationForm() {
             variant="outline"
             onClick={() => router.push("/admin/devices")}
             className="font-body"
+            disabled={isSubmitting}
           >
             Cancel
           </Button>
-          <Button type="submit" className="font-headline">
-            Register Device
+          <Button type="submit" className="font-headline" disabled={isSubmitting}>
+            {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            {isSubmitting ? 'Registering...' : 'Register Device'}
           </Button>
         </div>
       </form>

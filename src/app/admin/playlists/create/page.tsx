@@ -1,3 +1,4 @@
+
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
@@ -30,12 +31,7 @@ export default function CreatePlaylistPage() {
         </CardHeader>
         <CardContent>
           <PlaylistForm />
-          <div className="mt-8 flex justify-end gap-3 pt-4 border-t">
-            <Button variant="outline" asChild className="font-body">
-              <Link href="/admin/playlists">Cancel</Link>
-            </Button>
-            <Button type="submit" form="playlist-form" className="font-headline">Save Playlist</Button>
-          </div>
+          {/* Submit buttons are now part of PlaylistForm itself */}
         </CardContent>
       </Card>
     </div>

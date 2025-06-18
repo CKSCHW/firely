@@ -1,13 +1,42 @@
 
+"use client";
 import Link from 'next/link';
-import { mockPlaylists } from '@/data/mockData';
+import { mockPlaylists, ensureDataLoaded, availableContentItems } from '@/data/mockData';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { PlusCircle, Edit3, Trash2, Clock, Film, CalendarDays } from 'lucide-react';
+import { PlusCircle, Edit3, Trash2, Clock, Film, CalendarDays, Loader2 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
+import { useEffect, useState } from 'react';
+import type { Playlist } from '@/lib/types';
 
 export default function PlaylistsPage() {
+  const [isLoading, setIsLoading] = useState(true);
+  const [playlists, setPlaylists] = useState<Playlist[]>([]);
+
+  useEffect(() => {
+    async function loadData() {
+      setIsLoading(true);
+      await ensureDataLoaded();
+      // Make sure playlist items are fully populated if they were just IDs in a simplified JSON
+      const populatedPlaylists = mockPlaylists.map(p => ({
+        ...p,
+        items: p.items.map(itemRef => availableContentItems.find(ci => ci.id === itemRef.id) || itemRef).filter(Boolean)
+      }));
+      setPlaylists(populatedPlaylists);
+      setIsLoading(false);
+    }
+    loadData();
+  }, []);
+
+  if (isLoading) {
+    return (
+      <div className="flex justify-center items-center min-h-[calc(100vh-200px)]">
+        <Loader2 className="h-12 w-12 animate-spin text-primary" />
+      </div>
+    );
+  }
+  
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
@@ -25,7 +54,7 @@ export default function PlaylistsPage() {
         </Link>
       </div>
 
-      {mockPlaylists.length === 0 ? (
+      {playlists.length === 0 ? (
         <Card className="text-center py-12 shadow-md">
           <CardHeader>
             <Film className="mx-auto h-16 w-16 text-muted-foreground mb-4" />
@@ -44,7 +73,7 @@ export default function PlaylistsPage() {
         </Card>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {mockPlaylists.map((playlist) => (
+          {playlists.map((playlist) => (
             <Card key={playlist.id} className="flex flex-col shadow-md hover:shadow-lg transition-shadow">
               <CardHeader>
                 <CardTitle className="font-headline text-xl text-primary">{playlist.name}</CardTitle>

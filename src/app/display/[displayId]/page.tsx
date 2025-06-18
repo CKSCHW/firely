@@ -3,13 +3,14 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import Image from 'next/image';
-import type { Playlist, ContentItem } from '@/lib/types';
-import { mockPlaylists, mockDevices, availableContentItems } from '@/data/mockData';
+import type { Playlist, ContentItem, DisplayDevice } from '@/lib/types';
+import { mockPlaylists, mockDevices, availableContentItems, ensureDataLoaded } from '@/data/mockData';
 import { ArrowLeftCircle, ArrowRightCircle, Loader2, AlertTriangle, EyeOff, Tv2, FileWarning } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
+
 async function getPlaylistForDisplay(displayId: string): Promise<Playlist | null> {
-  await new Promise(resolve => setTimeout(resolve, 100)); 
+  await ensureDataLoaded(); // Ensure all data is loaded from files
   
   const device = mockDevices.find(d => d.id === displayId);
   if (!device || !device.currentPlaylistId) return null;
@@ -17,10 +18,16 @@ async function getPlaylistForDisplay(displayId: string): Promise<Playlist | null
   const playlistFromMock = mockPlaylists.find(p => p.id === device.currentPlaylistId);
   if (!playlistFromMock) return null;
 
-  const populatedItems = playlistFromMock.items.map(itemRef => {
-    // Ensure we get the full item object from availableContentItems
-    return availableContentItems.find(ci => ci.id === itemRef.id);
+  // Ensure items are fully populated. In the new file-based system,
+  // playlist.items might just be stored as references or partial objects.
+  // We need to resolve them against the full availableContentItems list.
+  const populatedItems = playlistFromMock.items.map(itemRefOrItem => {
+    // If itemRefOrItem is just an ID (or a simple object with an ID), find the full item.
+    // If it's already a full item (e.g., if mockPlaylists was constructed with full items), use it.
+    const fullItem = availableContentItems.find(ci => ci.id === (typeof itemRefOrItem === 'string' ? itemRefOrItem : itemRefOrItem.id));
+    return fullItem;
   }).filter(Boolean) as ContentItem[];
+
 
   return { ...playlistFromMock, items: populatedItems };
 }
@@ -32,7 +39,7 @@ export default function DisplayPage({ params }: { params: { displayId: string } 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isPaused, setIsPaused] = useState(false); 
-  const [contentError, setContentError] = useState<string | null>(null); // For individual content item errors
+  const [contentError, setContentError] = useState<string | null>(null);
 
   const fetchAndSetPlaylist = useCallback(async () => {
     setLoading(true);
@@ -46,9 +53,15 @@ export default function DisplayPage({ params }: { params: { displayId: string } 
       } else if (data && data.items.length === 0) {
         setError("Playlist is empty. Please add content.");
       } else {
-        setError("Playlist not found or display not configured.");
+        const deviceExists = mockDevices.some(d => d.id === params.displayId);
+        if (!deviceExists) {
+          setError("Display ID not found. Cannot load playlist.");
+        } else {
+           setError("Playlist not found or display not configured with a valid playlist.");
+        }
       }
     } catch (e) {
+      console.error("Error fetching playlist data:", e);
       setError("Failed to load playlist. Check network or configuration.");
     } finally {
       setLoading(false);
@@ -63,7 +76,7 @@ export default function DisplayPage({ params }: { params: { displayId: string } 
   const advanceToNextItem = useCallback(() => {
     if (!playlist || playlist.items.length === 0) return;
     setCurrentItemIndex((prevIndex) => (prevIndex + 1) % playlist.items.length);
-    setContentError(null); // Clear previous content error
+    setContentError(null); 
   }, [playlist]);
 
   useEffect(() => {
@@ -122,6 +135,9 @@ export default function DisplayPage({ params }: { params: { displayId: string } 
         <EyeOff className="w-24 h-24 text-slate-500 mb-6" />
         <p className="mt-4 text-3xl font-headline">No Content to Display</p>
         <p className="font-body text-slate-400 mt-2 text-lg">The assigned playlist is empty or could not be loaded.</p>
+        <Button onClick={fetchAndSetPlaylist} variant="outline" className="mt-8 text-slate-300 border-slate-500 hover:bg-gray-700 hover:text-slate-100">
+          Retry Loading
+        </Button>
         <p className="font-body text-slate-500 text-sm mt-10">Firefly Signage</p>
       </div>
     );
@@ -136,7 +152,7 @@ export default function DisplayPage({ params }: { params: { displayId: string } 
           <FileWarning className="w-16 h-16 mb-4" />
           <p className="text-xl font-semibold">Content Error</p>
           <p>{contentError}</p>
-          <p className="text-sm mt-2">Skipping to next item in {item.duration}s...</p>
+          <p className="text-sm mt-2">Skipping to next item in {item.duration || 10}s...</p>
         </div>
       );
     }
@@ -154,6 +170,7 @@ export default function DisplayPage({ params }: { params: { displayId: string } 
             priority
             className="animate-fadeIn"
             data-ai-hint={item.dataAiHint || "signage image"}
+            unoptimized={item.url.startsWith("https://placehold.co") || item.url.startsWith('blob:') || item.url.startsWith('/uploads/')}
             onError={() => setContentError(`Failed to load image: ${item.title || 'Untitled'}`)}
           />
         ) : <div className="w-full h-full flex items-center justify-center bg-gray-700 text-white"><FileWarning className="w-12 h-12 mr-2"/>Image URL missing</div>;
@@ -164,20 +181,20 @@ export default function DisplayPage({ params }: { params: { displayId: string } 
             src={item.url}
             autoPlay
             muted
-            loop // Consider making loop configurable per item
+            loop 
             className="w-full h-full object-contain animate-fadeIn"
             onError={() => setContentError(`Failed to load video: ${item.title || 'Untitled'}`)}
           />
         ) : <div className="w-full h-full flex items-center justify-center bg-gray-700 text-white"><FileWarning className="w-12 h-12 mr-2"/>Video URL missing</div>;
       case 'web':
-      case 'pdf': // PDFs are often rendered in iframes like web pages
+      case 'pdf': 
         return item.url ? (
           <iframe
             key={item.id}
             src={item.url}
             title={item.title || `Display Content ${currentItemIndex + 1}`}
             className="w-full h-full border-0 animate-fadeIn"
-            sandbox="allow-scripts allow-same-origin allow-popups" // Adjust sandbox as needed for security
+            sandbox="allow-scripts allow-same-origin allow-popups" 
             onError={() => setContentError(`Failed to load ${item.type} content: ${item.title || 'Untitled'}`)}
           />
         ) : <div className="w-full h-full flex items-center justify-center bg-gray-700 text-white"><FileWarning className="w-12 h-12 mr-2"/>{item.type} URL missing</div>;
@@ -220,3 +237,4 @@ export default function DisplayPage({ params }: { params: { displayId: string } 
     </div>
   );
 }
+

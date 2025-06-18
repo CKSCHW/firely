@@ -1,0 +1,83 @@
+
+[
+  {
+    "id": "content-1",
+    "type": "image",
+    "url": "https://placehold.co/1920x1080/FF9800/3F51B5?text=Orange+Promo",
+    "duration": 7,
+    "title": "Special Orange Promotion",
+    "dataAiHint": "promotion sale"
+  },
+  {
+    "id": "content-2",
+    "type": "image",
+    "url": "https://placehold.co/1920x1080/3F51B5/FFFFFF?text=Company+News+Update",
+    "duration": 10,
+    "title": "Latest Company News",
+    "dataAiHint": "corporate announcement"
+  },
+  {
+    "id": "content-3",
+    "type": "image",
+    "url": "https://placehold.co/1920x1080/4CAF50/FFFFFF?text=New+Green+Product",
+    "duration": 12,
+    "title": "Introducing Green Product",
+    "dataAiHint": "product feature"
+  },
+  {
+    "id": "content-4",
+    "type": "image",
+    "url": "https://placehold.co/1920x1080/F44336/FFFFFF?text=Important+Red+Alert",
+    "duration": 5,
+    "title": "Critical Red Alert",
+    "dataAiHint": "important warning"
+  },
+  {
+    "id": "content-5",
+    "type": "image",
+    "url": "https://placehold.co/1920x1080/9C27B0/FFFFFF?text=Upcoming+Purple+Event",
+    "duration": 8,
+    "title": "Don't Miss Purple Event",
+    "dataAiHint": "upcoming event"
+  },
+  {
+    "id": "content-6",
+    "type": "image",
+    "url": "https://placehold.co/1920x1080/00BCD4/FFFFFF?text=Cyan+Services+Info",
+    "duration": 10,
+    "title": "Our Cyan Services",
+    "dataAiHint": "service information"
+  },
+  {
+    "id": "content-7",
+    "type": "image",
+    "url": "https://placehold.co/1920x1080/FFEB3B/000000?text=Yellow+Highlights",
+    "duration": 9,
+    "title": "Yellow Highlights of the Week",
+    "dataAiHint": "weekly summary"
+  },
+  {
+    "id": "content-8",
+    "type": "video",
+    "url": "https://storage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4",
+    "duration": 30,
+    "title": "Big Buck Bunny Promo",
+    "dataAiHint": "animated video"
+  },
+  {
+    "id": "content-9",
+    "type": "web",
+    "url": "https://example.com",
+    "duration": 20,
+    "title": "Example Company Website",
+    "dataAiHint": "web page"
+  },
+  {
+    "id": "content-10",
+    "type": "pdf",
+    "url": "https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf",
+    "duration": 15,
+    "title": "Sample PDF Document",
+    "dataAiHint": "document info"
+  }
+]

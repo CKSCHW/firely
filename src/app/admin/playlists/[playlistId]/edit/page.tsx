@@ -1,14 +1,39 @@
+
+"use client"; // Ensure this is a client component if using hooks like useParams or useEffect for data fetching
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import PlaylistForm from "@/components/admin/PlaylistForm"; 
-import { mockPlaylists } from "@/data/mockData"; 
+import { mockPlaylists, ensureDataLoaded } from "@/data/mockData"; 
+import { useEffect, useState } from "react";
+import type { Playlist } from "@/lib/types";
+import { Loader2 } from "lucide-react";
 
 export default function EditPlaylistPage({ params }: { params: { playlistId: string } }) {
-  const playlist = mockPlaylists.find(p => p.id === params.playlistId);
+  const [playlist, setPlaylist] = useState<Playlist | undefined | null>(undefined); // undefined: loading, null: not found
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    async function loadPlaylist() {
+      setIsLoading(true);
+      await ensureDataLoaded(); // Make sure all data is loaded from files
+      const foundPlaylist = mockPlaylists.find(p => p.id === params.playlistId);
+      setPlaylist(foundPlaylist || null);
+      setIsLoading(false);
+    }
+    loadPlaylist();
+  }, [params.playlistId]);
   
-  if (!playlist) {
+  if (isLoading || playlist === undefined) {
+    return (
+      <div className="flex justify-center items-center min-h-[calc(100vh-200px)]">
+        <Loader2 className="h-12 w-12 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  if (playlist === null) {
     return (
       <div className="space-y-6">
         <div className="flex items-center gap-4">
@@ -62,12 +87,7 @@ export default function EditPlaylistPage({ params }: { params: { playlistId: str
         </CardHeader>
         <CardContent>
           <PlaylistForm playlistId={params.playlistId} />
-          <div className="mt-8 flex justify-end gap-3 pt-4 border-t">
-            <Button variant="outline" asChild className="font-body">
-              <Link href="/admin/playlists">Cancel</Link>
-            </Button>
-            <Button type="submit" form="playlist-form" className="font-headline">Save Changes</Button>
-          </div>
+           {/* Submit buttons are now part of PlaylistForm itself */}
         </CardContent>
       </Card>
     </div>

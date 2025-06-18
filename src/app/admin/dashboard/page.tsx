@@ -1,14 +1,32 @@
+
+"use client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
-import { Activity, BarChart3, ListChecks, Users, Zap, LibraryBig } from "lucide-react";
-import { mockDevices, mockPlaylists, availableContentItems } from '@/data/mockData';
+import { Activity, ListChecks, Users, Zap, LibraryBig, Loader2 } from "lucide-react";
+import { mockDevices, mockPlaylists, availableContentItems, ensureDataLoaded } from '@/data/mockData';
+import { useEffect, useState } from 'react';
 
 export default function DashboardPage() {
-  const onlineDevices = mockDevices.filter(d => d.status === 'online').length;
-  const totalDevices = mockDevices.length;
-  const totalPlaylists = mockPlaylists.length;
-  const totalContentItems = availableContentItems.length;
+  const [isLoading, setIsLoading] = useState(true);
+  const [onlineDevices, setOnlineDevices] = useState(0);
+  const [totalDevices, setTotalDevices] = useState(0);
+  const [totalPlaylists, setTotalPlaylists] = useState(0);
+  const [totalContentItems, setTotalContentItems] = useState(0);
+  
+  useEffect(() => {
+    async function loadData() {
+      setIsLoading(true);
+      await ensureDataLoaded();
+      setOnlineDevices(mockDevices.filter(d => d.status === 'online').length);
+      setTotalDevices(mockDevices.length);
+      setTotalPlaylists(mockPlaylists.length);
+      setTotalContentItems(availableContentItems.length);
+      setIsLoading(false);
+    }
+    loadData();
+  }, []);
+
 
   const quickStats = [
     { title: "Online Devices", value: `${onlineDevices} / ${totalDevices}`, icon: Zap, color: "text-green-500", description: "Currently active and connected." },
@@ -16,6 +34,14 @@ export default function DashboardPage() {
     { title: "Content Items", value: totalContentItems, icon: LibraryBig, color: "text-orange-500", description: "In your media library." },
     { title: "System Health", value: "Optimal", icon: Activity, color: "text-teal-500", description: "All systems operational." },
   ];
+
+  if (isLoading) {
+    return (
+      <div className="flex justify-center items-center min-h-[calc(100vh-200px)]">
+        <Loader2 className="h-12 w-12 animate-spin text-primary" />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">

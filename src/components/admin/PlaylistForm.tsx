@@ -2,7 +2,7 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useForm, Controller } from "react-hook-form";
+import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
@@ -19,12 +19,12 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
-import { addMockPlaylist, updateMockPlaylist, mockPlaylists, availableContentItems } from "@/data/mockData";
+import { addMockPlaylist, updateMockPlaylist, mockPlaylists, availableContentItems, ensureDataLoaded } from "@/data/mockData";
 import type { Playlist, ContentItem } from "@/lib/types";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import Link from "next/link";
-import { useEffect } from "react";
+import { Card, CardContent } from "@/components/ui/card";
+import { useEffect, useState } from "react";
+import { Loader2 } from "lucide-react";
 
 const playlistFormSchema = z.object({
   name: z.string().min(3, {
@@ -47,9 +47,9 @@ export default function PlaylistForm({ playlistId }: PlaylistFormProps) {
   const { toast } = useToast();
   const isEditMode = !!playlistId;
   
-  const existingPlaylist = isEditMode 
-    ? mockPlaylists.find(p => p.id === playlistId) 
-    : undefined;
+  const [isLoadingData, setIsLoadingData] = useState(true);
+  const [formContentItems, setFormContentItems] = useState<ContentItem[]>([]);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const form = useForm<PlaylistFormValues>({
     resolver: zodResolver(playlistFormSchema),
@@ -61,26 +61,41 @@ export default function PlaylistForm({ playlistId }: PlaylistFormProps) {
   });
 
   useEffect(() => {
-    if (isEditMode && existingPlaylist) {
-      form.reset({
-        name: existingPlaylist.name,
-        description: existingPlaylist.description || "",
-        itemIds: existingPlaylist.items.map(item => item.id),
-      });
+    async function loadInitialData() {
+      setIsLoadingData(true);
+      await ensureDataLoaded(); // Ensure all data (content items, playlists) are loaded
+      setFormContentItems([...availableContentItems]);
+
+      if (isEditMode && playlistId) {
+        const existingPlaylist = mockPlaylists.find(p => p.id === playlistId);
+        if (existingPlaylist) {
+          form.reset({
+            name: existingPlaylist.name,
+            description: existingPlaylist.description || "",
+            itemIds: existingPlaylist.items.map(item => item.id),
+          });
+        } else {
+           toast({ title: "Error", description: "Playlist not found.", variant: "destructive" });
+           router.push("/admin/playlists");
+        }
+      }
+      setIsLoadingData(false);
     }
-  }, [isEditMode, existingPlaylist, form]);
+    loadInitialData();
+  }, [isEditMode, playlistId, form, toast, router]);
 
 
-  function onSubmit(values: PlaylistFormValues) {
+  async function onSubmit(values: PlaylistFormValues) {
+    setIsSubmitting(true);
     try {
       if (isEditMode && playlistId) {
-        updateMockPlaylist(playlistId, values.name, values.description, values.itemIds);
+        await updateMockPlaylist(playlistId, values.name, values.description, values.itemIds);
         toast({
           title: "Playlist Updated",
           description: `Playlist "${values.name}" has been successfully updated.`,
         });
       } else {
-        addMockPlaylist(values.name, values.description, values.itemIds);
+        await addMockPlaylist(values.name, values.description, values.itemIds);
         toast({
           title: "Playlist Created",
           description: `Playlist "${values.name}" has been successfully created.`,
@@ -95,7 +110,17 @@ export default function PlaylistForm({ playlistId }: PlaylistFormProps) {
         description: message,
         variant: "destructive",
       });
+    } finally {
+      setIsSubmitting(false);
     }
+  }
+  
+  if (isLoadingData) {
+    return (
+      <div className="flex justify-center items-center py-10">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
   }
 
   return (
@@ -108,7 +133,7 @@ export default function PlaylistForm({ playlistId }: PlaylistFormProps) {
             <FormItem>
               <FormLabel className="font-headline">Playlist Name</FormLabel>
               <FormControl>
-                <Input placeholder="e.g., Morning Announcements" {...field} className="font-body"/>
+                <Input placeholder="e.g., Morning Announcements" {...field} className="font-body" disabled={isSubmitting}/>
               </FormControl>
               <FormMessage />
             </FormItem>
@@ -126,6 +151,7 @@ export default function PlaylistForm({ playlistId }: PlaylistFormProps) {
                   placeholder="Briefly describe the playlist's content or purpose."
                   className="resize-none font-body"
                   {...field}
+                  disabled={isSubmitting}
                 />
               </FormControl>
               <FormMessage />
@@ -148,7 +174,8 @@ export default function PlaylistForm({ playlistId }: PlaylistFormProps) {
                 <CardContent className="p-0">
                  <ScrollArea className="h-72 rounded-md border">
                     <div className="p-4 space-y-3">
-                  {availableContentItems.map((item) => (
+                  {formContentItems.length === 0 && <p className="text-sm text-muted-foreground p-4 text-center">No content items available. Please add content items first.</p>}
+                  {formContentItems.map((item) => (
                     <FormField
                       key={item.id}
                       control={form.control}
@@ -163,14 +190,13 @@ export default function PlaylistForm({ playlistId }: PlaylistFormProps) {
                               <Checkbox
                                 checked={field.value?.includes(item.id)}
                                 onCheckedChange={(checked) => {
-                                  return checked
-                                    ? field.onChange([...(field.value || []), item.id])
-                                    : field.onChange(
-                                        (field.value || []).filter(
-                                          (value) => value !== item.id
-                                        )
-                                      );
+                                  const currentIds = field.value || [];
+                                  const newIds = checked
+                                    ? [...currentIds, item.id]
+                                    : currentIds.filter((value) => value !== item.id);
+                                  field.onChange(newIds);
                                 }}
+                                disabled={isSubmitting}
                               />
                             </FormControl>
                             <div className="space-y-1 leading-none">
@@ -194,7 +220,15 @@ export default function PlaylistForm({ playlistId }: PlaylistFormProps) {
             </FormItem>
           )}
         />
-        {/* Submit buttons are handled by the parent page */}
+         <div className="mt-8 flex justify-end gap-3 pt-4 border-t">
+            <Button variant="outline" type="button" onClick={() => router.push('/admin/playlists')} className="font-body" disabled={isSubmitting}>
+              Cancel
+            </Button>
+            <Button type="submit" form="playlist-form" className="font-headline" disabled={isSubmitting || isLoadingData || formContentItems.length === 0}>
+              {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              {isSubmitting ? 'Saving...' : (isEditMode ? 'Save Changes' : 'Save Playlist')}
+            </Button>
+          </div>
       </form>
     </Form>
   );

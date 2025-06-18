@@ -17,11 +17,9 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
-import { Textarea } // Assuming Textarea might be used for other fields, keeping import
-from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { addMockContentItem, updateMockContentItem, availableContentItems } from "@/data/mockData";
+import { addMockContentItem, updateMockContentItem, availableContentItems, ensureDataLoaded } from "@/data/mockData";
 import type { ContentItem } from "@/lib/types";
 import { useEffect, useState } from "react";
 import { UploadCloud, Loader2 } from "lucide-react";
@@ -31,7 +29,7 @@ const contentItemFormSchema = z.object({
   type: z.enum(["image", "video", "web", "pdf"], {
     required_error: "You need to select a content type.",
   }),
-  url: z.string().min(1, { message: "Content source/URL is required." }), // URL can be local path after upload
+  url: z.string().min(1, { message: "Content source/URL is required." }),
   duration: z.coerce.number().min(1, { message: "Duration must be at least 1 second." }),
   dataAiHint: z.string().optional().refine(value => !value || value.split(' ').length <= 2, {
     message: "AI hint can have at most two words."
@@ -49,14 +47,13 @@ export default function ContentItemForm({ contentId }: ContentItemFormProps) {
   const { toast } = useToast();
   const isEditMode = !!contentId;
 
-  const existingContentItem = isEditMode
-    ? availableContentItems.find(c => c.id === contentId)
-    : undefined;
-
-  const [previewUrl, setPreviewUrl] = useState<string | undefined>(existingContentItem?.url);
+  const [previewUrl, setPreviewUrl] = useState<string | undefined>();
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [isUploading, setIsUploading] = useState(false);
-  const [fileInputKey, setFileInputKey] = useState(Date.now()); // To reset file input
+  const [isProcessing, setIsProcessing] = useState(false); // Covers both uploading and saving
+  const [fileInputKey, setFileInputKey] = useState(Date.now());
+  const [isLoadingData, setIsLoadingData] = useState(true);
+  const [currentPersistedUrl, setCurrentPersistedUrl] = useState<string | undefined>();
+
 
   const form = useForm<ContentItemFormValues>({
     resolver: zodResolver(contentItemFormSchema),
@@ -73,47 +70,71 @@ export default function ContentItemForm({ contentId }: ContentItemFormProps) {
   const watchedType = form.watch("type");
 
   useEffect(() => {
-    if (watchedType === "image" && form.formState.errors.url === undefined && watchedUrl) {
-      if (watchedUrl.startsWith('/') || watchedUrl.startsWith('http')) { // Local or remote URL
-         setPreviewUrl(watchedUrl);
-      } else {
-        setPreviewUrl(undefined);
+    async function loadInitialData() {
+      setIsLoadingData(true);
+      await ensureDataLoaded(); // Ensure content items are loaded
+
+      if (isEditMode && contentId) {
+        const existingContentItem = availableContentItems.find(c => c.id === contentId);
+        if (existingContentItem) {
+          form.reset({
+            title: existingContentItem.title || "",
+            type: existingContentItem.type,
+            url: existingContentItem.url, // This will be the persisted URL
+            duration: existingContentItem.duration,
+            dataAiHint: existingContentItem.dataAiHint || "",
+          });
+          setCurrentPersistedUrl(existingContentItem.url);
+          if (existingContentItem.type === 'image' && existingContentItem.url) {
+            setPreviewUrl(existingContentItem.url);
+          }
+        } else {
+          toast({ title: "Error", description: "Content item not found.", variant: "destructive" });
+          router.push("/admin/content");
+        }
       }
-    } else {
-      setPreviewUrl(undefined);
+      setIsLoadingData(false);
     }
-  }, [watchedUrl, watchedType, form.formState.errors.url]);
+    loadInitialData();
+  }, [isEditMode, contentId, form, toast, router]);
 
 
   useEffect(() => {
-    if (isEditMode && existingContentItem) {
-      form.reset({
-        title: existingContentItem.title || "",
-        type: existingContentItem.type,
-        url: existingContentItem.url,
-        duration: existingContentItem.duration,
-        dataAiHint: existingContentItem.dataAiHint || "",
-      });
-      if (existingContentItem.type === 'image') {
-        setPreviewUrl(existingContentItem.url);
-      }
+    // Update preview based on URL field, which might be a blob URL or a persisted URL
+    if (watchedType === "image") {
+       if (watchedUrl && (watchedUrl.startsWith('blob:') || watchedUrl.startsWith('/') || watchedUrl.startsWith('http'))) {
+         setPreviewUrl(watchedUrl);
+       } else if (!selectedFile && currentPersistedUrl && watchedType === 'image') {
+         // If no new file selected, and there's a persisted URL for an image, show that
+         setPreviewUrl(currentPersistedUrl);
+       } else {
+         setPreviewUrl(undefined);
+       }
+    } else {
+      setPreviewUrl(undefined);
     }
-  }, [isEditMode, existingContentItem, form]);
+  }, [watchedUrl, watchedType, selectedFile, currentPersistedUrl]);
+
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     if (event.target.files && event.target.files[0]) {
       const file = event.target.files[0];
       setSelectedFile(file);
+      // For images, show a local blob preview immediately
       if (watchedType === "image") {
-        setPreviewUrl(URL.createObjectURL(file)); // Show local preview for image
+        const localPreview = URL.createObjectURL(file);
+        setPreviewUrl(localPreview);
+        // Do NOT set form URL here, it will be set after successful upload
       }
-      form.setValue("url", file.name); // Temporarily set URL to file name, will be replaced by server URL
+      // For other types, we don't set a preview from the blob
+      // The form.setValue("url", file.name) was problematic; URL should only be set post-upload.
+      // We can indicate the selected file separately if needed.
     }
   };
 
   async function onSubmit(values: ContentItemFormValues) {
-    setIsUploading(true);
-    let finalUrl = values.url;
+    setIsProcessing(true);
+    let finalUrl = values.url; // Use the current URL value from the form (could be existing URL)
 
     if (selectedFile && (values.type === 'image' || values.type === 'video' || values.type === 'pdf')) {
       const formData = new FormData();
@@ -137,7 +158,7 @@ export default function ContentItemForm({ contentId }: ContentItemFormProps) {
           description: message,
           variant: "destructive",
         });
-        setIsUploading(false);
+        setIsProcessing(false);
         return;
       }
     } else if (values.type === 'web' && !values.url.startsWith('http')) {
@@ -146,7 +167,7 @@ export default function ContentItemForm({ contentId }: ContentItemFormProps) {
           description: "Web content URL must start with http or https.",
           variant: "destructive",
         });
-        setIsUploading(false);
+        setIsProcessing(false);
         return;
     }
 
@@ -155,19 +176,19 @@ export default function ContentItemForm({ contentId }: ContentItemFormProps) {
       const submittedValues: Omit<ContentItem, 'id'> = {
         title: values.title,
         type: values.type,
-        url: finalUrl,
+        url: finalUrl, // Use the potentially updated finalUrl
         duration: values.duration,
         dataAiHint: values.dataAiHint || undefined,
       };
 
       if (isEditMode && contentId) {
-        updateMockContentItem(contentId, submittedValues);
+        await updateMockContentItem(contentId, submittedValues);
         toast({
           title: "Content Item Updated",
           description: `Content item "${values.title}" has been successfully updated.`,
         });
       } else {
-        addMockContentItem(submittedValues);
+        await addMockContentItem(submittedValues);
         toast({
           title: "Content Item Created",
           description: `Content item "${values.title}" has been successfully created.`,
@@ -183,30 +204,49 @@ export default function ContentItemForm({ contentId }: ContentItemFormProps) {
         variant: "destructive",
       });
     } finally {
-      setIsUploading(false);
+      setIsProcessing(false);
       setSelectedFile(null);
-      setFileInputKey(Date.now()); // Reset file input
+      setFileInputKey(Date.now()); 
     }
   }
   
-  // Reset file input and preview if type changes
   useEffect(() => {
-    setSelectedFile(null);
-    setFileInputKey(Date.now());
+    // When type changes:
+    setSelectedFile(null); // Clear any selected file
+    setFileInputKey(Date.now()); // Reset the file input element
+    
+    // If not in edit mode, or if the original type was different, clear the URL field
+    if (!isEditMode || (availableContentItems.find(c => c.id === contentId)?.type !== watchedType)) {
+         if (watchedType === 'web') {
+            form.setValue('url', 'https://');
+         } else {
+            form.setValue('url', ''); // Clear URL for non-web types unless it's an existing item being edited
+         }
+    }
+    
     if (watchedType !== 'image') {
-        if (!isEditMode || (existingContentItem && existingContentItem.type !== 'image')) {
-             setPreviewUrl(undefined);
-        }
-    }
-    // If switching back to web, clear the URL if it was a filename placeholder
-    if (watchedType === 'web' && form.getValues('url') && !form.getValues('url').startsWith('http')) {
-        if (!isEditMode || (existingContentItem && existingContentItem.type !== 'web' )) {
-            form.setValue('url', '');
+      setPreviewUrl(undefined); // Clear image preview if type is not image
+    } else if (isEditMode && contentId) {
+        // If switching to image type in edit mode, try to set preview from existing persisted URL
+        const existingItem = availableContentItems.find(c => c.id === contentId);
+        if (existingItem?.type === 'image' && existingItem.url) {
+            setPreviewUrl(existingItem.url);
+            form.setValue('url', existingItem.url); // Ensure form URL matches
+        } else {
+            form.setValue('url', ''); // Clear URL if existing item is not an image
         }
     }
 
-  }, [watchedType, isEditMode, existingContentItem, form]);
 
+  }, [watchedType, isEditMode, contentId, form]);
+
+  if (isLoadingData && isEditMode) {
+    return (
+      <div className="flex justify-center items-center py-10">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
 
   return (
     <Form {...form}>
@@ -218,7 +258,7 @@ export default function ContentItemForm({ contentId }: ContentItemFormProps) {
             <FormItem>
               <FormLabel className="font-headline">Title</FormLabel>
               <FormControl>
-                <Input placeholder="e.g., Summer Sale Banner" {...field} className="font-body"/>
+                <Input placeholder="e.g., Summer Sale Banner" {...field} className="font-body" disabled={isProcessing}/>
               </FormControl>
               <FormMessage />
             </FormItem>
@@ -234,13 +274,9 @@ export default function ContentItemForm({ contentId }: ContentItemFormProps) {
               <Select 
                 onValueChange={(value) => {
                   field.onChange(value);
-                  if (value !== 'image' && value !== 'video' && value !== 'pdf') {
-                    setSelectedFile(null); // Clear file if not an uploadable type
-                  }
-                  form.setValue('url', ''); // Clear URL on type change to avoid validation issues with file names
-                  setPreviewUrl(undefined);
                 }} 
                 defaultValue={field.value}
+                disabled={isProcessing}
               >
                 <FormControl>
                   <SelectTrigger className="font-body">
@@ -270,7 +306,7 @@ export default function ContentItemForm({ contentId }: ContentItemFormProps) {
             </FormLabel>
             <FormControl>
               <Input 
-                key={fileInputKey} // Used to reset the file input
+                key={fileInputKey} 
                 type="file" 
                 onChange={handleFileChange} 
                 className="font-body"
@@ -279,15 +315,16 @@ export default function ContentItemForm({ contentId }: ContentItemFormProps) {
                   watchedType === "video" ? "video/*" :
                   watchedType === "pdf" ? ".pdf" : ""
                 }
+                disabled={isProcessing}
               />
             </FormControl>
             <FormDescription className="font-body">
-              Select a file to upload. Max 50MB (not enforced by this prototype).
-              {isEditMode && existingContentItem?.url && !selectedFile && <span className="block mt-1">Current file: <a href={existingContentItem.url} target="_blank" rel="noopener noreferrer" className="underline">{existingContentItem.url.split('/').pop()}</a>. Uploading a new file will replace it.</span>}
+              Select a file to upload. 
+              {isEditMode && currentPersistedUrl && !selectedFile && <span className="block mt-1">Current file: <a href={currentPersistedUrl} target="_blank" rel="noopener noreferrer" className="underline break-all">{currentPersistedUrl.split('/').pop()}</a>. Uploading a new file will replace it.</span>}
             </FormDescription>
-            {/* Display filename if selected, useful if URL is not a previewable type */}
-            {selectedFile && <p className="text-sm text-muted-foreground">Selected file: {selectedFile.name}</p>}
-            <FormMessage>{form.formState.errors.url?.message}</FormMessage> 
+            {selectedFile && <p className="text-sm text-muted-foreground mt-1">New file selected: {selectedFile.name}</p>}
+             {/* Display error for URL field if it's related to file handling (e.g. upload failed and URL not set) */}
+            <FormMessage>{form.formState.errors.url?.message}</FormMessage>
           </FormItem>
         ) : (
           <FormField
@@ -297,7 +334,7 @@ export default function ContentItemForm({ contentId }: ContentItemFormProps) {
               <FormItem>
                 <FormLabel className="font-headline">Content URL</FormLabel>
                 <FormControl>
-                  <Input placeholder="https://example.com/webpage" {...field} className="font-body"/>
+                  <Input placeholder="https://example.com/webpage" {...field} className="font-body" disabled={isProcessing}/>
                 </FormControl>
                 <FormDescription className="font-body">
                   Enter the full URL for the web content (e.g., https://example.com).
@@ -312,7 +349,7 @@ export default function ContentItemForm({ contentId }: ContentItemFormProps) {
           <div className="space-y-2">
             <FormLabel className="font-headline">Image Preview</FormLabel>
             <div className="relative w-full max-w-md h-64 rounded border bg-muted overflow-hidden">
-               <Image src={previewUrl} alt="Content preview" layout="fill" objectFit="contain" unoptimized={previewUrl.startsWith("https://placehold.co") || previewUrl.startsWith('blob:')} />
+               <Image src={previewUrl} alt="Content preview" layout="fill" objectFit="contain" unoptimized={previewUrl.startsWith("https://placehold.co") || previewUrl.startsWith('blob:') || previewUrl.startsWith('/uploads')} />
             </div>
           </div>
         )}
@@ -325,7 +362,7 @@ export default function ContentItemForm({ contentId }: ContentItemFormProps) {
             <FormItem>
               <FormLabel className="font-headline">Duration (seconds)</FormLabel>
               <FormControl>
-                <Input type="number" placeholder="10" {...field} className="font-body"/>
+                <Input type="number" placeholder="10" {...field} className="font-body" disabled={isProcessing}/>
               </FormControl>
               <FormDescription className="font-body">
                 How long this item should be displayed in a playlist.
@@ -342,7 +379,7 @@ export default function ContentItemForm({ contentId }: ContentItemFormProps) {
             <FormItem>
               <FormLabel className="font-headline">AI Hint (Optional for Images)</FormLabel>
               <FormControl>
-                <Input placeholder="e.g., nature landscape" {...field} className="font-body"/>
+                <Input placeholder="e.g., nature landscape" {...field} className="font-body" disabled={isProcessing}/>
               </FormControl>
               <FormDescription className="font-body">
                 One or two keywords for AI image search (e.g., 'office building', 'abstract pattern'). Used if this is a placeholder image.
@@ -351,15 +388,13 @@ export default function ContentItemForm({ contentId }: ContentItemFormProps) {
             </FormItem>
           )}
         />
-         {/* Submit buttons are in the parent page, but we need one here if this form is used standalone for submission */}
-         {/* This form has its own submit logic, so the buttons on parent page for 'edit' and 'create' content use this form's submit */}
          <div className="mt-8 flex justify-end gap-3 pt-4 border-t">
-            <Button variant="outline" type="button" onClick={() => router.push('/admin/content')} className="font-body" disabled={isUploading}>
+            <Button variant="outline" type="button" onClick={() => router.push('/admin/content')} className="font-body" disabled={isProcessing}>
               Cancel
             </Button>
-            <Button type="submit" form="content-item-form" className="font-headline" disabled={isUploading}>
-              {isUploading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              {isUploading ? 'Saving...' : (isEditMode ? 'Save Changes' : 'Save Content Item')}
+            <Button type="submit" form="content-item-form" className="font-headline" disabled={isProcessing || (isLoadingData && isEditMode)}>
+              {isProcessing && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              {isProcessing ? 'Saving...' : (isEditMode ? 'Save Changes' : 'Save Content Item')}
             </Button>
           </div>
       </form>
