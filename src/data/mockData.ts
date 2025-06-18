@@ -76,6 +76,7 @@ export let mockDevices: DisplayDevice[] = [];
 export let aiAvailableContent: AvailableContent[] = [];
 
 let isDataLoaded = false;
+let loadingPromise: Promise<void> | null = null;
 
 function reSyncAiAvailableContent() {
   aiAvailableContent = availableContentItems.map(item => ({
@@ -85,56 +86,90 @@ function reSyncAiAvailableContent() {
 }
 
 export async function ensureDataLoaded() {
-  if (isDataLoaded) return;
-
-  if (!isFirebaseConfigured || !db) {
-    console.warn("Firebase is not configured or not available. Using default in-memory data. Please set up Firebase environment variables.");
-    availableContentItems.splice(0, availableContentItems.length, ...JSON.parse(JSON.stringify(defaultContentItems)));
-    mockPlaylists.splice(0, mockPlaylists.length, ...JSON.parse(JSON.stringify(defaultPlaylists)));
-    mockDevices.splice(0, mockDevices.length, ...JSON.parse(JSON.stringify(defaultDevices)));
-    isDataLoaded = true;
-    reSyncAiAvailableContent();
+  if (isDataLoaded) {
+    console.log('Data already loaded, skipping Firestore fetch.');
     return;
   }
 
-  const loadCollection = async <T extends { id: string }>(collectionName: string, defaultData: T[], inMemoryArray: T[]): Promise<void> => {
-    try {
-      const q = query(collection(db, collectionName));
-      const querySnapshot = await getDocs(q);
-      
-      if (querySnapshot.empty && defaultData.length > 0) {
-        console.log(`Firestore collection '${collectionName}' is empty. Initializing with default data...`);
-        const batch = writeBatch(db);
-        JSON.parse(JSON.stringify(defaultData)).forEach((item: T) => {
-          const docRef = doc(db, collectionName, item.id);
-          batch.set(docRef, item);
-        });
-        await batch.commit();
+  if (loadingPromise) {
+    console.log('Data loading already in progress, awaiting existing promise.');
+    await loadingPromise;
+    return;
+  }
+
+  const doLoad = async () => {
+    if (!isFirebaseConfigured || !db) {
+      console.warn("Firebase is not configured or not available. Using default in-memory data. Please set up Firebase environment variables.");
+      availableContentItems.splice(0, availableContentItems.length, ...JSON.parse(JSON.stringify(defaultContentItems)));
+      mockPlaylists.splice(0, mockPlaylists.length, ...JSON.parse(JSON.stringify(defaultPlaylists)));
+      mockDevices.splice(0, mockDevices.length, ...JSON.parse(JSON.stringify(defaultDevices)));
+      isDataLoaded = true;
+      reSyncAiAvailableContent();
+      return;
+    }
+
+    const loadCollection = async <T extends { id: string }>(collectionName: string, defaultData: T[], inMemoryArray: T[]): Promise<void> => {
+      try {
+        const q = query(collection(db, collectionName));
+        const querySnapshot = await getDocs(q);
+        
+        if (querySnapshot.empty && defaultData.length > 0) {
+          console.log(`Firestore collection '${collectionName}' is empty. Initializing with default data...`);
+          const batch = writeBatch(db);
+          JSON.parse(JSON.stringify(defaultData)).forEach((item: T) => {
+            const docRef = doc(db, collectionName, item.id);
+            batch.set(docRef, item);
+          });
+          await batch.commit();
+          inMemoryArray.splice(0, inMemoryArray.length, ...JSON.parse(JSON.stringify(defaultData)));
+          console.log(`Firestore collection '${collectionName}' initialized and in-memory array populated.`);
+        } else {
+          const dataFromDb: T[] = [];
+          querySnapshot.forEach((docSnapshot) => {
+            dataFromDb.push({ ...docSnapshot.data(), id: docSnapshot.id } as T);
+          });
+          inMemoryArray.splice(0, inMemoryArray.length, ...dataFromDb);
+          console.log(`Loaded ${dataFromDb.length} items from Firestore collection '${collectionName}' into in-memory array.`);
+        }
+      } catch (error) {
+        console.error(`Error loading or initializing collection ${collectionName} from Firestore:`, error);
+        console.warn(`Falling back to default data for collection '${collectionName}'.`);
         inMemoryArray.splice(0, inMemoryArray.length, ...JSON.parse(JSON.stringify(defaultData)));
-      } else {
-        const dataFromDb: T[] = [];
-        querySnapshot.forEach((docSnapshot) => {
-          // Ensure all fields, including id, are correctly mapped
-          dataFromDb.push({ ...docSnapshot.data(), id: docSnapshot.id } as T);
-        });
-        inMemoryArray.splice(0, inMemoryArray.length, ...dataFromDb);
       }
+    };
+
+    console.log('Initial data load from Firestore starting...');
+    try {
+      await Promise.all([
+        loadCollection<ContentItem>('contentItems', defaultContentItems, availableContentItems),
+        loadCollection<Playlist>('playlists', defaultPlaylists, mockPlaylists),
+        loadCollection<DisplayDevice>('devices', defaultDevices, mockDevices),
+      ]);
+      isDataLoaded = true; // Set this only after all collections are attempted
+      reSyncAiAvailableContent();
+      console.log('Initial data load from Firestore complete.');
     } catch (error) {
-      console.error(`Error loading or initializing collection ${collectionName} from Firestore:`, error);
-      inMemoryArray.splice(0, inMemoryArray.length, ...JSON.parse(JSON.stringify(defaultData)));
+        console.error('Error during parallel data loading from Firestore:', error);
+        // If Promise.all fails, isDataLoaded might not be true, potentially allowing retry.
+        // Or, consider setting isDataLoaded = true anyway to prevent retries if fallback data is used for all.
+        // For now, let's assume if any fails, it's caught by individual loadCollection errors.
+        // If not, isDataLoaded would remain false, leading to retries on next call.
+        // To be safe, let's set isDataLoaded true here too, since fallbacks are in place.
+        isDataLoaded = true; 
+        reSyncAiAvailableContent(); // Ensure this runs even on error if fallback data is used.
     }
   };
 
-  console.log('Initial data load from Firestore starting...');
-  await Promise.all([
-    loadCollection<ContentItem>('contentItems', defaultContentItems, availableContentItems),
-    loadCollection<Playlist>('playlists', defaultPlaylists, mockPlaylists),
-    loadCollection<DisplayDevice>('devices', defaultDevices, mockDevices),
-  ]);
+  loadingPromise = doLoad();
 
-  reSyncAiAvailableContent();
-  isDataLoaded = true;
-  console.log('Initial data load from Firestore complete.');
+  try {
+    await loadingPromise;
+  } catch (error) {
+    // This catch is mostly for unexpected errors within doLoad not caught by inner try-catches
+    console.error("Unhandled error during ensureDataLoaded execution:", error);
+  } finally {
+    loadingPromise = null;
+  }
 }
 
 // --- Mutator Functions ---
@@ -157,7 +192,7 @@ export async function addMockDevice(name: string): Promise<DisplayDevice> {
       throw error;
     }
   }
-  mockDevices.push(newDevice); // Keep in-memory sync
+  mockDevices.push(newDevice); 
   return newDevice;
 }
 
@@ -178,13 +213,13 @@ export async function updateMockDevice(deviceId: string, updates: Partial<Omit<D
 
   if (isFirebaseConfigured && db) {
     try {
-      await setDoc(doc(db, 'devices', deviceId), updatedDeviceData);
+      await setDoc(doc(db, 'devices', deviceId), updatedDeviceData, { merge: true });
     } catch (error) {
       console.error("Error updating device in Firestore: ", error);
       throw error;
     }
   }
-  mockDevices[deviceIndex] = updatedDeviceData; // Keep in-memory sync
+  mockDevices[deviceIndex] = updatedDeviceData; 
   return updatedDeviceData;
 }
 
@@ -200,7 +235,7 @@ export async function deleteMockDevice(deviceId: string): Promise<boolean> {
       throw error;
     }
   }
-  mockDevices = mockDevices.filter(d => d.id !== deviceId); // Keep in-memory sync
+  mockDevices = mockDevices.filter(d => d.id !== deviceId); 
   return mockDevices.length < initialLength;
 }
 
@@ -217,7 +252,6 @@ export async function addMockPlaylist(name: string, description: string | undefi
   };
   if (isFirebaseConfigured && db) {
     try {
-      // Firestore stores items as an array of objects. Ensure it's structured correctly.
       const firestorePlaylist = { ...newPlaylist, items: newPlaylist.items.map(item => ({...item})) };
       await setDoc(doc(db, 'playlists', newPlaylist.id), firestorePlaylist);
     } catch (error) {
@@ -225,7 +259,7 @@ export async function addMockPlaylist(name: string, description: string | undefi
       throw error;
     }
   }
-  mockPlaylists.push(newPlaylist); // Keep in-memory sync
+  mockPlaylists.push(newPlaylist); 
   return newPlaylist;
 }
 
@@ -246,13 +280,13 @@ export async function updateMockPlaylist(playlistId: string, name: string, descr
   if (isFirebaseConfigured && db) {
     try {
       const firestorePlaylist = { ...updatedPlaylistData, items: updatedPlaylistData.items.map(item => ({...item})) };
-      await setDoc(doc(db, 'playlists', playlistId), firestorePlaylist);
+      await setDoc(doc(db, 'playlists', playlistId), firestorePlaylist, { merge: true });
     } catch (error) {
       console.error("Error updating playlist in Firestore: ", error);
       throw error;
     }
   }
-  mockPlaylists[playlistIndex] = updatedPlaylistData; // Keep in-memory sync
+  mockPlaylists[playlistIndex] = updatedPlaylistData; 
   return updatedPlaylistData;
 }
 
@@ -270,7 +304,7 @@ export async function addMockContentItem(itemData: Omit<ContentItem, 'id'>): Pro
       throw error;
     }
   }
-  availableContentItems.push(newItem); // Keep in-memory sync
+  availableContentItems.push(newItem); 
   reSyncAiAvailableContent();
   return newItem;
 }
@@ -285,33 +319,37 @@ export async function updateMockContentItem(contentId: string, itemData: Partial
 
   if (isFirebaseConfigured && db) {
     try {
-      await setDoc(doc(db, 'contentItems', contentId), updatedItemData);
-      // Also update item if it exists in any playlist in Firestore
+      await setDoc(doc(db, 'contentItems', contentId), updatedItemData, { merge: true });
+      
       const playlistsSnapshot = await getDocs(collection(db, "playlists"));
       const batch = writeBatch(db);
+      let wasAnyPlaylistModified = false;
       playlistsSnapshot.forEach(playlistDoc => {
         const playlist = playlistDoc.data() as Playlist;
-        let playlistModified = false;
+        let playlistModifiedThisIteration = false;
         const updatedItems = playlist.items.map(item => {
           if (item.id === contentId) {
-            playlistModified = true;
+            playlistModifiedThisIteration = true;
             return updatedItemData;
           }
           return item;
         });
-        if (playlistModified) {
+        if (playlistModifiedThisIteration) {
+          wasAnyPlaylistModified = true;
           batch.update(doc(db, "playlists", playlist.id), { items: updatedItems.map(item => ({...item})), updatedAt: new Date().toISOString() });
         }
       });
-      await batch.commit();
+      if (wasAnyPlaylistModified) {
+        await batch.commit();
+      }
 
     } catch (error) {
       console.error("Error updating content item or playlists in Firestore: ", error);
       throw error;
     }
   }
-  availableContentItems[itemIndex] = updatedItemData; // Keep in-memory sync
-  mockPlaylists = mockPlaylists.map(playlist => ({ // Keep in-memory playlists sync
+  availableContentItems[itemIndex] = updatedItemData; 
+  mockPlaylists = mockPlaylists.map(playlist => ({ 
     ...playlist,
     items: playlist.items.map(item => item.id === contentId ? updatedItemData : item),
     updatedAt: playlist.items.some(item => item.id === contentId) ? new Date().toISOString() : playlist.updatedAt,
@@ -330,25 +368,29 @@ export async function deleteMockContentItem(contentId: string): Promise<boolean>
   if (isFirebaseConfigured && db) {
     try {
       await deleteDoc(doc(db, 'contentItems', contentId));
-      // Also remove item from any playlist in Firestore
+      
       const playlistsSnapshot = await getDocs(collection(db, "playlists"));
       const batch = writeBatch(db);
+      let wasAnyPlaylistModified = false;
       playlistsSnapshot.forEach(playlistDoc => {
         const playlist = playlistDoc.data() as Playlist;
         const originalItemCount = playlist.items.length;
         const updatedItems = playlist.items.filter(item => item.id !== contentId);
         if (updatedItems.length < originalItemCount) {
+           wasAnyPlaylistModified = true;
            batch.update(doc(db, "playlists", playlist.id), { items: updatedItems.map(item => ({...item})), updatedAt: new Date().toISOString() });
         }
       });
-      await batch.commit();
+      if (wasAnyPlaylistModified) {
+        await batch.commit();
+      }
     } catch (error) {
       console.error("Error deleting content item or updating playlists in Firestore: ", error);
       throw error;
     }
   }
-  availableContentItems.splice(itemIndex, 1); // Keep in-memory sync
-  mockPlaylists = mockPlaylists.map(playlist => ({ // Keep in-memory playlists sync
+  availableContentItems.splice(itemIndex, 1); 
+  mockPlaylists = mockPlaylists.map(playlist => ({ 
     ...playlist,
     items: playlist.items.filter(item => item.id !== contentId),
      updatedAt: playlist.items.some(item => item.id === contentId) ? new Date().toISOString() : playlist.updatedAt,
