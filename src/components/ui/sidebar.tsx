@@ -1,3 +1,4 @@
+
 "use client"
 
 import * as React from "react"
@@ -543,48 +544,55 @@ const SidebarMenuButton = React.forwardRef<
 >(
   (
     {
-      asChild = false,
+      asChild: propAsChild = false, // Renamed to avoid conflict if 'asChild' is in restProps
       isActive = false,
       variant = "default",
       size = "default",
       tooltip,
       className,
-      ...props
+      children, // Explicitly include children
+      ...restProps // Contains all other props passed to SidebarMenuButton
     },
     ref
   ) => {
-    const Comp = asChild ? Slot : "button"
+    const Comp = propAsChild ? Slot : "button"
     const { isMobile, state } = useSidebar()
 
-    const button = (
+    // Filter out 'asChild' from restProps before spreading onto Comp
+    const { asChild: _forwardedAsChild, ...finalProps } = restProps
+
+    const buttonElement = (
       <Comp
         ref={ref}
         data-sidebar="menu-button"
         data-size={size}
         data-active={isActive}
         className={cn(sidebarMenuButtonVariants({ variant, size }), className)}
-        {...props}
-      />
+        {...finalProps}
+      >
+        {children}
+      </Comp>
     )
 
     if (!tooltip) {
-      return button
+      return buttonElement
     }
 
+    let tooltipProps: React.ComponentProps<typeof TooltipContent>
     if (typeof tooltip === "string") {
-      tooltip = {
-        children: tooltip,
-      }
+      tooltipProps = { children: tooltip }
+    } else {
+      tooltipProps = tooltip
     }
 
     return (
       <Tooltip>
-        <TooltipTrigger asChild>{button}</TooltipTrigger>
+        <TooltipTrigger asChild>{buttonElement}</TooltipTrigger>
         <TooltipContent
           side="right"
           align="center"
           hidden={state !== "collapsed" || isMobile}
-          {...tooltip}
+          {...tooltipProps}
         />
       </Tooltip>
     )
