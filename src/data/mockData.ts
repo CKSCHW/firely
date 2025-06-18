@@ -1,14 +1,13 @@
 
 import type { Playlist, DisplayDevice, ContentItem, AvailableContent, ScheduleEntry } from '@/lib/types';
 import { v4 as uuidv4 } from 'uuid';
-import { db, isFirebaseConfigured } from '@/lib/firebase'; // Import Firestore instance
-import { collection, doc, setDoc, getDoc, getDocs, deleteDoc, writeBatch, query, FieldValue } from 'firebase/firestore';
+import { db, isFirebaseConfigured } from '@/lib/firebase'; 
+import { collection, doc, setDoc, getDoc, getDocs, deleteDoc, writeBatch, query, updateDoc } from 'firebase/firestore';
 
-// Helper function to remove undefined properties from an object
 function removeUndefinedProps(obj: any): any {
   const newObj: any = {};
   for (const key in obj) {
-    if (Object.prototype.hasOwnProperty.call(obj, key)) { // Ensure it's an own property
+    if (Object.prototype.hasOwnProperty.call(obj, key)) { 
       if (obj[key] !== undefined) {
         newObj[key] = obj[key];
       }
@@ -17,7 +16,6 @@ function removeUndefinedProps(obj: any): any {
   return newObj;
 }
 
-// Default data (used to seed Firestore if empty, or as fallback if Firebase isn't configured)
 const defaultContentItems: ContentItem[] = [
   { id: 'content-1', type: 'image', url: 'https://placehold.co/1920x1080/FF9800/3F51B5?text=Orange+Promo', duration: 7, title: 'Special Orange Promotion', dataAiHint: 'promotion sale' },
   { id: 'content-2', type: 'image', url: 'https://placehold.co/1920x1080/3F51B5/FFFFFF?text=Company+News+Update', duration: 10, title: 'Latest Company News', dataAiHint: 'corporate announcement' },
@@ -71,7 +69,7 @@ const defaultDevices: DisplayDevice[] = [
     id: 'display-102',
     name: 'Cafeteria Screen (East Wall)',
     status: 'offline',
-    lastSeen: new Date(Date.now() - 1000 * 60 * 60 * 3).toISOString(),
+    lastSeen: new Date(Date.now() - 1000 * 60 * 60 * 24 * 3).toISOString(), // Older lastSeen for testing
     currentPlaylistId: 'playlist-2',
     schedule: []
   },
@@ -88,7 +86,6 @@ const defaultDevices: DisplayDevice[] = [
   }
 ];
 
-// In-memory caches
 export let availableContentItems: ContentItem[] = [];
 export let mockPlaylists: Playlist[] = [];
 export let mockDevices: DisplayDevice[] = [];
@@ -118,7 +115,7 @@ export async function ensureDataLoaded() {
 
   const doLoad = async () => {
     if (!isFirebaseConfigured || !db) {
-      console.warn("Firebase is not configured or not available. Using default in-memory data. Please set up Firebase environment variables.");
+      console.warn("Firebase is not configured or not available. Using default in-memory data.");
       availableContentItems.splice(0, availableContentItems.length, ...JSON.parse(JSON.stringify(defaultContentItems)));
       mockPlaylists.splice(0, mockPlaylists.length, ...JSON.parse(JSON.stringify(defaultPlaylists)));
       mockDevices.splice(0, mockDevices.length, ...JSON.parse(JSON.stringify(defaultDevices)));
@@ -140,6 +137,9 @@ export async function ensureDataLoaded() {
             let dataToSet = item;
             if (collectionName === 'playlists' && (item as any).items) {
                 dataToSet = { ...item, items: (item as any).items.map((subItem: any) => removeUndefinedProps({...subItem})) };
+            } else if (collectionName === 'devices' && !(item as any).currentPlaylistId) {
+                const { currentPlaylistId, ...rest } = item as any; // Explicitly remove currentPlaylistId if not present in default data
+                dataToSet = rest as T;
             }
             batch.set(docRef, removeUndefinedProps(dataToSet));
           });
@@ -189,8 +189,6 @@ export async function ensureDataLoaded() {
   }
 }
 
-// --- Mutator Functions ---
-
 export async function addMockDevice(deviceId: string, name: string): Promise<{ success: boolean; device?: DisplayDevice; message?: string }> {
   await ensureDataLoaded();
   const currentTime = new Date().toISOString();
@@ -203,21 +201,21 @@ export async function addMockDevice(deviceId: string, name: string): Promise<{ s
         return { success: false, message: `Device with ID "${deviceId}" already exists.` };
       }
       
-      // Object to be stored in Firestore. currentPlaylistId is intentionally omitted for new devices.
       const firestoreData = {
+        id: deviceId, // Ensure ID is part of the object for Firestore document ID if needed, though setDoc uses deviceId param
         name,
-        status: 'online' as 'online' | 'offline', // Type assertion
+        status: 'online' as 'online' | 'offline',
         lastSeen: currentTime,
         schedule: [] as ScheduleEntry[],
+        // currentPlaylistId is intentionally omitted here if not set
       };
       await setDoc(deviceDocRef, removeUndefinedProps(firestoreData));
     } catch (error) {
       console.error("Error adding device to Firestore: ", error);
-      throw error; // Re-throw to be caught by the server action
+      throw error; 
     }
   }
 
-  // Full object for in-memory cache and return type.
   const newDeviceInMemory: DisplayDevice = {
     id: deviceId,
     name,
@@ -227,7 +225,6 @@ export async function addMockDevice(deviceId: string, name: string): Promise<{ s
   };
   const existingInMemoryDeviceIndex = mockDevices.findIndex(d => d.id === deviceId);
   if (existingInMemoryDeviceIndex > -1) {
-     // This case should ideally not be hit if Firestore check is primary
      mockDevices[existingInMemoryDeviceIndex] = newDeviceInMemory;
   } else {
     mockDevices.push(newDeviceInMemory);
@@ -244,21 +241,30 @@ export async function updateMockDevice(deviceId: string, updates: Partial<Omit<D
     return undefined;
   }
   
-  // Construct the full updated object for in-memory
    const updatedDeviceInMemory: DisplayDevice = {
     ...mockDevices[deviceIndex],
     name: updates.name !== undefined ? updates.name : mockDevices[deviceIndex].name,
+    // Handle currentPlaylistId carefully: if explicitly set to undefined in updates, it means "no fallback playlist"
     currentPlaylistId: 'currentPlaylistId' in updates ? updates.currentPlaylistId : mockDevices[deviceIndex].currentPlaylistId,
     schedule: updates.schedule !== undefined ? updates.schedule : mockDevices[deviceIndex].schedule,
-    lastSeen: new Date().toISOString(), 
+    lastSeen: new Date().toISOString(), // Always update lastSeen on any update
   };
-
 
   if (isFirebaseConfigured && db) {
     try {
-      const firestoreUpdates = removeUndefinedProps(updates);
-      if (Object.keys(firestoreUpdates).length > 0) { 
-        await setDoc(doc(db, 'devices', deviceId), firestoreUpdates, { merge: true });
+      // Prepare updates for Firestore, ensuring currentPlaylistId is handled correctly
+      const firestoreUpdates: any = { ...updates };
+      if ('currentPlaylistId' in updates && updates.currentPlaylistId === undefined) {
+        // If currentPlaylistId is explicitly set to undefined, we might want to remove it or set to null
+        // For now, removeUndefinedProps will handle it. If Firestore requires null for deletion, adjust here.
+      }
+      // lastSeen and status are managed by heartbeat or other specific actions, not generic update
+      delete firestoreUpdates.lastSeen;
+      delete firestoreUpdates.status;
+
+      const cleanFirestoreUpdates = removeUndefinedProps(firestoreUpdates);
+      if (Object.keys(cleanFirestoreUpdates).length > 0) { 
+        await setDoc(doc(db, 'devices', deviceId), cleanFirestoreUpdates, { merge: true });
       }
     } catch (error) {
       console.error("Error updating device in Firestore: ", error);
@@ -268,6 +274,69 @@ export async function updateMockDevice(deviceId: string, updates: Partial<Omit<D
   mockDevices[deviceIndex] = updatedDeviceInMemory; 
   return updatedDeviceInMemory;
 }
+
+export async function updateMockDeviceHeartbeat(deviceId: string): Promise<DisplayDevice | undefined> {
+  await ensureDataLoaded();
+  console.log(`[mockData] Attempting heartbeat for device: ${deviceId}`);
+  const deviceIndex = mockDevices.findIndex(d => d.id === deviceId);
+
+  if (deviceIndex === -1) {
+    console.warn(`[mockData] Device ${deviceId} not found in memory for heartbeat.`);
+    // Optionally, check Firestore directly if not found in memory, or rely on initial load
+    if (isFirebaseConfigured && db) {
+        const deviceRef = doc(db, 'devices', deviceId);
+        const deviceSnap = await getDoc(deviceRef);
+        if (!deviceSnap.exists()) {
+            console.error(`[mockData] Device ${deviceId} not found in Firestore for heartbeat.`);
+            return undefined;
+        }
+        // If found in Firestore but not in memory (should be rare after ensureDataLoaded), update Firestore
+    } else {
+        return undefined;
+    }
+  }
+
+  const newLastSeen = new Date().toISOString();
+  const newStatus = 'online';
+
+  if (isFirebaseConfigured && db) {
+    try {
+      const deviceRef = doc(db, 'devices', deviceId);
+      await updateDoc(deviceRef, {
+        lastSeen: newLastSeen,
+        status: newStatus,
+      });
+      console.log(`[mockData] Firestore heartbeat updated for ${deviceId}`);
+    } catch (error) {
+      console.error(`[mockData] Error updating heartbeat in Firestore for ${deviceId}:`, error);
+      // Don't throw, but log. The in-memory update might still proceed or be useful.
+    }
+  }
+
+  // Update in-memory cache if device was found or even if only Firestore was updated initially
+  if (deviceIndex !== -1) {
+    mockDevices[deviceIndex] = {
+      ...mockDevices[deviceIndex],
+      lastSeen: newLastSeen,
+      status: newStatus,
+    };
+    console.log(`[mockData] In-memory heartbeat updated for ${deviceId}`);
+    return mockDevices[deviceIndex];
+  } else if (isFirebaseConfigured && db) { 
+    // If it was not in memory but we updated Firestore, fetch it to return
+     const deviceSnap = await getDoc(doc(db, 'devices', deviceId));
+     if (deviceSnap.exists()) {
+        const updatedDeviceFromDb = { ...deviceSnap.data(), id: deviceId } as DisplayDevice;
+        // Optionally add/update it in the in-memory cache here too
+        const existingIdx = mockDevices.findIndex(d => d.id === deviceId);
+        if (existingIdx > -1) mockDevices[existingIdx] = updatedDeviceFromDb;
+        else mockDevices.push(updatedDeviceFromDb);
+        return updatedDeviceFromDb;
+     }
+  }
+  return undefined;
+}
+
 
 export async function deleteMockDevice(deviceId: string): Promise<boolean> {
   await ensureDataLoaded();
@@ -442,3 +511,4 @@ export async function deleteMockContentItem(contentId: string): Promise<boolean>
   reSyncAiAvailableContent();
   return true;
 }
+

@@ -2,7 +2,7 @@
 'use server';
 
 import { z } from 'zod';
-import { addMockDevice, updateMockDevice } from '@/data/mockData';
+import { addMockDevice, updateMockDevice, updateMockDeviceHeartbeat } from '@/data/mockData';
 import type { ScheduleEntry } from '@/lib/types';
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
@@ -23,7 +23,7 @@ export async function updateDeviceAction(
   try {
     const result = await updateMockDevice(deviceId, {
       name: values.deviceName,
-      currentPlaylistId: values.currentPlaylistId || undefined,
+      currentPlaylistId: values.currentPlaylistId || undefined, // Ensure undefined if empty string
       schedule: schedule,
     });
 
@@ -64,4 +64,26 @@ export async function registerDeviceAction(values: z.infer<typeof registerDevice
 
   revalidatePath('/admin/devices');
   redirect('/admin/devices');
+}
+
+export async function updateDeviceHeartbeatAction(deviceId: string) {
+  if (!deviceId) {
+    console.warn('updateDeviceHeartbeatAction called without deviceId');
+    return { success: false, message: 'Device ID is required for heartbeat.' };
+  }
+  try {
+    console.log(`Server Action: Received heartbeat for device ${deviceId}`);
+    const result = await updateMockDeviceHeartbeat(deviceId);
+    if (!result) {
+      console.warn(`Server Action: Heartbeat update failed for device ${deviceId}, device not found or update error.`);
+      return { success: false, message: 'Device not found or heartbeat update failed.' };
+    }
+    console.log(`Server Action: Heartbeat successful for device ${deviceId}`);
+    // No revalidation needed here as it's a frequent, minor update primarily for status.
+    // The devices page revalidates on its own load or via other actions.
+    return { success: true };
+  } catch (error) {
+    console.error(`Server Action: Error processing heartbeat for device ${deviceId}:`, error);
+    return { success: false, message: error instanceof Error ? error.message : 'Heartbeat processing failed.' };
+  }
 }
