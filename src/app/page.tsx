@@ -2,13 +2,14 @@
 "use client";
 
 import Link from 'next/link';
+import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { useState, type FormEvent } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Tv, Settings, Zap } from 'lucide-react';
+import { Tv, Settings, MonitorPlay } from 'lucide-react';
 
 export default function HomePage() {
   const router = useRouter();
@@ -24,14 +25,15 @@ export default function HomePage() {
   return (
     <div className="flex flex-col items-center justify-center min-h-screen bg-gradient-to-br from-background to-secondary p-4 sm:p-8 selection:bg-accent selection:text-accent-foreground">
       <header className="mb-10 text-center">
-        <div className="inline-flex items-center justify-center p-3 bg-primary rounded-full mb-6 shadow-lg">
-          <Zap className="w-12 h-12 text-primary-foreground" />
+        <div className="inline-flex items-center justify-center p-3 rounded-full mb-6 shadow-lg">
+          {/* Placeholder for logo, assuming logo.png is in public folder */}
+          <Image src="/logo.png" alt="Schwarzmann Screen Logo" width={64} height={64} data-ai-hint="company logo" />
         </div>
         <h1 className="text-5xl sm:text-6xl font-headline font-bold text-primary mb-3 tracking-tight">
-          Firefly Signage
+          Schwarzmann Screen
         </h1>
         <p className="text-lg sm:text-xl text-muted-foreground font-body max-w-2xl mx-auto">
-          Illuminate your spaces with dynamic content. Effortlessly manage and deploy stunning digital signage across all your displays.
+          Beleuchten Sie Ihre Räume mit dynamischen Inhalten. Verwalten und implementieren Sie mühelos beeindruckende digitale Beschilderungen auf all Ihren Displays.
         </p>
       </header>
 
@@ -43,18 +45,18 @@ export default function HomePage() {
               Admin Panel
             </CardTitle>
             <CardDescription className="font-body text-base">
-              Manage playlists, monitor devices, and schedule your digital content with ease.
+              Playlists verwalten, Geräte überwachen und Ihre digitalen Inhalte einfach planen.
             </CardDescription>
           </CardHeader>
           <CardContent>
             <p className="font-body text-sm text-muted-foreground mb-4">
-              Access the comprehensive suite of tools to control your signage network.
+              Greifen Sie auf die umfassende Tool-Suite zu, um Ihr Beschilderungsnetzwerk zu steuern.
             </p>
           </CardContent>
           <CardFooter>
             <Link href="/admin/dashboard" asChild>
               <Button className="w-full font-headline text-lg py-6" variant="default">
-                Go to Admin
+                Zum Admin Panel
               </Button>
             </Link>
           </CardFooter>
@@ -64,11 +66,11 @@ export default function HomePage() {
           <form onSubmit={handleLaunchDisplay}>
             <CardHeader>
               <CardTitle className="flex items-center gap-3 font-headline text-2xl text-primary">
-                <Tv className="w-7 h-7 text-accent" />
-                Launch Display
+                <MonitorPlay className="w-7 h-7 text-accent" />
+                Display Starten
               </CardTitle>
               <CardDescription className="font-body text-base">
-                Enter a Display ID to launch its content client. (e.g., sample-display-1)
+                Geben Sie eine Display-ID ein, um den Inhaltsclient zu starten. (z.B., sample-display-1)
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -80,14 +82,14 @@ export default function HomePage() {
                 type="text"
                 value={displayId}
                 onChange={(e) => setDisplayId(e.target.value)}
-                placeholder="Enter Display ID (e.g., sample-display-1)"
+                placeholder="Display ID eingeben (z.B. sample-display-1)"
                 className="font-body"
                 required
               />
             </CardContent>
             <CardFooter>
               <Button type="submit" className="w-full font-headline text-lg py-6" variant="outline" disabled={!displayId.trim()}>
-                Launch Display Client
+                Display Client Starten
               </Button>
             </CardFooter>
           </form>
@@ -95,9 +97,9 @@ export default function HomePage() {
       </div>
 
       <footer className="mt-16 text-center text-muted-foreground font-body text-sm">
-        <p>&copy; {new Date().getFullYear()} Firefly Signage. Ignite Your Screens.</p>
+        <p>&copy; {new Date().getFullYear()} Schwarzmann Screen. Ihre Bildschirme, brillant beleuchtet.</p>
         <p className="text-xs mt-1">
-          Note: Device online/offline status in this prototype is based on mock data and not real-time.
+          Hinweis: Der Online-/Offline-Status der Geräte in diesem Prototyp basiert auf Mock-Daten und nicht auf Echtzeit.
         </p>
       </footer>
     </div>

@@ -3,8 +3,8 @@ import './globals.css';
 import { Toaster } from "@/components/ui/toaster";
 
 export const metadata: Metadata = {
-  title: 'Firefly Signage',
-  description: 'Modern solution for dynamic digital displays',
+  title: 'Schwarzmann Screen',
+  description: 'Moderne Lösung für dynamische digitale Anzeigen',
 };
 
 export default function RootLayout({

@@ -29,10 +29,10 @@ export default function DashboardPage() {
 
 
   const quickStats = [
-    { title: "Online Devices", value: `${onlineDevices} / ${totalDevices}`, icon: Zap, color: "text-green-500", description: "Currently active and connected." },
-    { title: "Total Playlists", value: totalPlaylists, icon: ListChecks, color: "text-blue-500", description: "Available for scheduling." },
-    { title: "Content Items", value: totalContentItems, icon: LibraryBig, color: "text-orange-500", description: "In your media library." },
-    { title: "System Health", value: "Optimal", icon: Activity, color: "text-teal-500", description: "All systems operational." },
+    { title: "Online Geräte", value: `${onlineDevices} / ${totalDevices}`, icon: Zap, color: "text-green-500", description: "Aktuell aktiv und verbunden." },
+    { title: "Playlists Gesamt", value: totalPlaylists, icon: ListChecks, color: "text-blue-500", description: "Verfügbar zur Planung." },
+    { title: "Inhaltselemente", value: totalContentItems, icon: LibraryBig, color: "text-orange-500", description: "In Ihrer Medienbibliothek." },
+    { title: "Systemzustand", value: "Optimal", icon: Activity, color: "text-teal-500", description: "Alle Systeme betriebsbereit." },
   ];
 
   if (isLoading) {
@@ -47,14 +47,14 @@ export default function DashboardPage() {
     <div className="space-y-6">
       <Card className="shadow-md">
         <CardHeader>
-          <CardTitle className="font-headline text-3xl text-primary">Welcome to Firefly Admin</CardTitle>
+          <CardTitle className="font-headline text-3xl text-primary">Willkommen bei Schwarzmann Screen Admin</CardTitle>
           <CardDescription className="font-body text-lg">
-            Here's a quick overview of your digital signage network.
+            Hier ist ein schneller Überblick über Ihr digitales Beschilderungsnetzwerk.
           </CardDescription>
         </CardHeader>
         <CardContent>
           <p className="font-body text-muted-foreground">
-            Manage your content, monitor device statuses, and ensure your displays are always shining bright.
+            Verwalten Sie Ihre Inhalte, überwachen Sie den Gerätestatus und stellen Sie sicher, dass Ihre Displays immer hell leuchten.
           </p>
         </CardContent>
       </Card>
@@ -76,22 +76,22 @@ export default function DashboardPage() {
       
       <Card className="shadow-md">
         <CardHeader>
-          <CardTitle className="font-headline text-2xl">Quick Actions</CardTitle>
+          <CardTitle className="font-headline text-2xl">Schnellaktionen</CardTitle>
         </CardHeader>
         <CardContent className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
           <Link href="/admin/playlists/create" asChild>
             <Button variant="default" className="w-full py-6 text-base font-headline">
-              Create New Playlist
+              Neue Playlist Erstellen
             </Button>
           </Link>
           <Link href="/admin/content/create" asChild>
             <Button variant="default" className="w-full py-6 text-base font-headline">
-              Add New Content
+              Neuen Inhalt Hinzufügen
             </Button>
           </Link>
            <Link href="/admin/devices/register" asChild>
             <Button variant="default" className="w-full py-6 text-base font-headline">
-              Register New Device
+              Neues Gerät Registrieren
             </Button>
           </Link>
         </CardContent>

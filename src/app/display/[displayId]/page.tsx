@@ -79,8 +79,8 @@ async function getActivePlaylistForDisplay(displayId: string): Promise<Playlist 
 
 
 export default function DisplayPage() {
-  const params = useParams<{ displayId: string }>();
-  const displayId = params.displayId;
+  const paramsHook = useParams<{ displayId: string }>();
+  const displayId = paramsHook.displayId;
 
   const [playlist, setPlaylist] = useState<Playlist | null>(null);
   const [currentItemIndex, setCurrentItemIndex] = useState(0);
@@ -103,25 +103,20 @@ export default function DisplayPage() {
   }, [displayId]);
 
   useEffect(() => {
-    if (!displayId) return; // Don't run effects if displayId is not yet available
+    if (!displayId) return; 
 
-    sendHeartbeat(); // Initial heartbeat on load
-    const heartbeatInterval = setInterval(sendHeartbeat, 60 * 1000); // Send heartbeat every 60 seconds
+    sendHeartbeat(); 
+    const heartbeatInterval = setInterval(sendHeartbeat, 60 * 1000); 
 
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'visible') {
-        sendHeartbeat(); // Send heartbeat when tab becomes visible again
+        sendHeartbeat(); 
       }
     };
     document.addEventListener('visibilitychange', handleVisibilityChange);
 
-    // Attempt to send a "going offline" signal (not guaranteed)
     const handleBeforeUnload = async () => {
-        // This is best-effort. Most browsers will limit what can be done here.
-        // A more robust solution involves a backend service detecting lack of heartbeats.
         console.log(`[Display ${displayId}] Attempting to signal offline on unload.`);
-        // In a real scenario, you might try to update status to 'potentially_offline'
-        // But direct reliable updates are hard here. The server will rely on lack of heartbeats.
     };
     window.addEventListener('beforeunload', handleBeforeUnload);
 
@@ -167,7 +162,7 @@ export default function DisplayPage() {
 
   const fetchAndSetPlaylist = useCallback(async () => {
     if (!displayId) {
-      setLoading(false); // Ensure loading stops if displayId isn't ready
+      setLoading(false); 
       return;
     }
     setLoading(true);
@@ -181,21 +176,21 @@ export default function DisplayPage() {
         setCurrentItemIndex(0); 
         console.log(`[Display ${displayId}] Playlist "${data.name}" loaded with ${data.items.length} items.`);
       } else if (data && data.items.length === 0) {
-        setError(`Active playlist "${data.name}" is empty. Please add content or check schedule.`);
+        setError(`Aktive Playlist "${data.name}" ist leer. Bitte Inhalt hinzufügen oder Zeitplan prüfen.`);
         console.warn(`[Display ${displayId}] Active playlist "${data.name}" is empty.`);
       } else {
         const deviceExists = mockDevices.some(d => d.id === displayId);
         if (!deviceExists) {
-          setError(`Display ID "${displayId}" not found. Cannot load playlist.`);
+          setError(`Display ID "${displayId}" nicht gefunden. Playlist kann nicht geladen werden.`);
           console.error(`[Display ${displayId}] Display ID configuration not found.`);
         } else {
-           setError("No active playlist found for this display. Check device schedule and fallback configuration.");
+           setError("Keine aktive Playlist für dieses Display gefunden. Gerätezeitplan und Standardkonfiguration prüfen.");
            console.warn(`[Display ${displayId}] No active playlist could be determined.`);
         }
       }
     } catch (e) {
       console.error(`[Display ${displayId}] Error fetching playlist data:`, e);
-      setError("Failed to load playlist. Check network or configuration.");
+      setError("Fehler beim Laden der Playlist. Netzwerk oder Konfiguration prüfen.");
     } finally {
       setLoading(false);
     }
@@ -203,9 +198,9 @@ export default function DisplayPage() {
 
 
   useEffect(() => {
-    if (!displayId) return; // Don't run if displayId is not available
+    if (!displayId) return; 
     fetchAndSetPlaylist();
-    const scheduleCheckInterval = setInterval(fetchAndSetPlaylist, 60 * 1000 * 5); // Re-check playlist based on schedule every 5 mins
+    const scheduleCheckInterval = setInterval(fetchAndSetPlaylist, 60 * 1000 * 5); 
     console.log(`[Display ${displayId}] Display client initialized. Checking for active playlist based on schedule every 5m.`);
     return () => {
       clearInterval(scheduleCheckInterval);
@@ -224,6 +219,8 @@ export default function DisplayPage() {
     if (!playlist || playlist.items.length === 0 || isPaused || loading || error || contentError) return;
 
     const currentItem = playlist.items[currentItemIndex];
+    if (!currentItem) return; // Guard if currentItem is somehow undefined
+    
     const duration = (currentItem.duration || 10) * 1000;
     console.log(`[Display ${displayId}] Displaying item "${currentItem.title || currentItem.id}" for ${duration / 1000}s.`);
 
@@ -233,7 +230,7 @@ export default function DisplayPage() {
 
     return () => {
       clearTimeout(timer);
-      if (currentItem) { // Add a check for currentItem
+      if (currentItem) { 
         console.log(`[Display ${displayId}] Cleared timer for item "${currentItem.title || currentItem.id}".`);
       }
     };
@@ -253,12 +250,12 @@ export default function DisplayPage() {
     setTimeout(() => setIsPaused(false), 5000); 
   };
   
-  if (loading || !displayId) { // Also check if displayId is available before rendering main content
+  if (loading || !displayId) { 
     return (
       <div className="fixed inset-0 bg-gray-900 flex flex-col items-center justify-center text-slate-200">
         <Loader2 className="w-20 h-20 animate-spin text-accent mb-6" />
-        <p className="mt-4 text-3xl font-headline tracking-wide">Loading Display Content for {displayId || '...'} </p>
-        <p className="font-body text-slate-400 text-lg">Firefly Signage</p>
+        <p className="mt-4 text-3xl font-headline tracking-wide">Lade Display Inhalte für {displayId || '...'} </p>
+        <p className="font-body text-slate-400 text-lg">Schwarzmann Screen</p>
       </div>
     );
   }
@@ -268,11 +265,11 @@ export default function DisplayPage() {
       <div className="fixed inset-0 bg-red-900 flex flex-col items-center justify-center text-red-100 p-8 text-center">
         <AlertTriangle className="w-24 h-24 text-red-300 mb-6" />
         <p className="mt-4 text-4xl font-headline">{error}</p>
-        <p className="font-body mt-3 text-lg text-red-200">Display ID: {displayId}. Please check the display configuration in the admin panel or contact support.</p>
+        <p className="font-body mt-3 text-lg text-red-200">Display ID: {displayId}. Bitte prüfen Sie die Display-Konfiguration im Admin-Panel oder kontaktieren Sie den Support.</p>
         <Button onClick={fetchAndSetPlaylist} variant="outline" className="mt-8 text-red-100 border-red-300 hover:bg-red-800 hover:text-red-50">
-          Retry Loading
+          Erneut laden
         </Button>
-        <p className="font-body text-red-400 text-sm mt-12">Firefly Signage Error</p>
+        <p className="font-body text-red-400 text-sm mt-12">Schwarzmann Screen Fehler</p>
       </div>
     );
   }
@@ -281,28 +278,28 @@ export default function DisplayPage() {
      return (
       <div className="fixed inset-0 bg-gray-800 flex flex-col items-center justify-center text-slate-300 p-8 text-center">
         <EyeOff className="w-24 h-24 text-slate-500 mb-6" />
-        <p className="mt-4 text-3xl font-headline">No Content to Display</p>
-        <p className="font-body text-slate-400 mt-2 text-lg">Display ID: {displayId}. No playlist is currently scheduled or the active playlist is empty.</p>
+        <p className="mt-4 text-3xl font-headline">Kein Inhalt zum Anzeigen</p>
+        <p className="font-body text-slate-400 mt-2 text-lg">Display ID: {displayId}. Keine Playlist aktuell geplant oder die aktive Playlist ist leer.</p>
         <Button onClick={fetchAndSetPlaylist} variant="outline" className="mt-8 text-slate-300 border-slate-500 hover:bg-gray-700 hover:text-slate-100">
-          Retry Loading
+          Erneut laden
         </Button>
-        <p className="font-body text-slate-500 text-sm mt-10">Firefly Signage</p>
+        <p className="font-body text-slate-500 text-sm mt-10">Schwarzmann Screen</p>
       </div>
     );
   }
 
   const currentItem = playlist.items[currentItemIndex];
-   if (!currentItem) { // Add a guard clause for currentItem
+   if (!currentItem) { 
     return (
       <div className="fixed inset-0 bg-gray-700 flex flex-col items-center justify-center text-yellow-300 p-4 text-center">
         <Loader2 className="w-16 h-16 mb-4 animate-spin" />
-        <p className="text-xl">Loading item data...</p>
+        <p className="text-xl">Lade Inhaltsdaten...</p>
       </div>
     );
   }
 
   const handleContentError = (item: ContentItem, type: string) => {
-     const errorMessage = `Failed to load ${type} content: "${item.title || 'Untitled'}" from ${item.url}`;
+     const errorMessage = `Fehler beim Laden von ${type}-Inhalt: "${item.title || 'Ohne Titel'}" von ${item.url}`;
      console.error(`[Display ${displayId}] ${errorMessage}`);
      setContentError(errorMessage);
   };
@@ -312,9 +309,9 @@ export default function DisplayPage() {
       return (
         <div className="w-full h-full flex flex-col items-center justify-center bg-black text-yellow-400 p-4 text-center">
           <FileWarning className="w-16 h-16 mb-4" />
-          <p className="text-xl font-semibold">Content Error</p>
+          <p className="text-xl font-semibold">Inhaltsfehler</p>
           <p className="text-md max-w-xl break-words">{contentError}</p>
-          <p className="text-sm mt-2">Will attempt next item in {item.duration || 10}s...</p>
+          <p className="text-sm mt-2">Versuche nächstes Element in {item.duration || 10}s...</p>
         </div>
       );
     }
@@ -325,7 +322,7 @@ export default function DisplayPage() {
           <Image
             key={item.id}
             src={item.url}
-            alt={item.title || `Display Content ${currentItemIndex + 1}`}
+            alt={item.title || `Display Inhalt ${currentItemIndex + 1}`}
             fill={true}
             style={{ objectFit: "contain" }}
             quality={90}
@@ -335,7 +332,7 @@ export default function DisplayPage() {
             unoptimized={item.url.startsWith("https://placehold.co") || item.url.startsWith('blob:') || item.url.startsWith('/uploads/')}
             onError={() => handleContentError(item, 'image')}
           />
-        ) : <div className="w-full h-full flex items-center justify-center bg-gray-700 text-white"><FileWarning className="w-12 h-12 mr-2"/>Image URL missing for "{item.title || item.id}"</div>;
+        ) : <div className="w-full h-full flex items-center justify-center bg-gray-700 text-white"><FileWarning className="w-12 h-12 mr-2"/>Bild-URL fehlt für "{item.title || item.id}"</div>;
       case 'video':
         return item.url ? (
           <video
@@ -348,27 +345,37 @@ export default function DisplayPage() {
             onError={() => handleContentError(item, 'video')}
             onCanPlay={() => setContentError(null)} 
           />
-        ) : <div className="w-full h-full flex items-center justify-center bg-gray-700 text-white"><FileWarning className="w-12 h-12 mr-2"/>Video URL missing for "{item.title || item.id}"</div>;
-      case 'web':
-      case 'pdf': 
+        ) : <div className="w-full h-full flex items-center justify-center bg-gray-700 text-white"><FileWarning className="w-12 h-12 mr-2"/>Video-URL fehlt für "{item.title || item.id}"</div>;
+      case 'pdf':
+        return item.url ? (
+          <embed
+            key={item.id}
+            src={item.url}
+            type="application/pdf"
+            className="w-full h-full animate-fadeIn"
+            // onError is not reliably supported on embed for all browsers/viewers for content errors
+            // We rely on visual lack of content or browser's own error message within embed
+          />
+        ) : <div className="w-full h-full flex items-center justify-center bg-gray-700 text-white"><FileWarning className="w-12 h-12 mr-2"/>PDF URL fehlt für "{item.title || item.id}"</div>;
+      case 'web': 
         return item.url ? (
           <iframe
             key={item.id}
             src={item.url}
-            title={item.title || `Display Content ${currentItemIndex + 1}`}
+            title={item.title || `Display Inhalt ${currentItemIndex + 1}`}
             className="w-full h-full border-0 animate-fadeIn"
-            sandbox="allow-scripts allow-same-origin allow-popups allow-downloads" 
+            sandbox="allow-scripts allow-same-origin allow-popups allow-forms allow-modals allow-presentation" 
             onError={() => handleContentError(item, item.type)}
             onLoad={() => setContentError(null)} 
           />
-        ) : <div className="w-full h-full flex items-center justify-center bg-gray-700 text-white"><FileWarning className="w-12 h-12 mr-2"/>{item.type.toUpperCase()} URL missing for "{item.title || item.id}"</div>;
+        ) : <div className="w-full h-full flex items-center justify-center bg-gray-700 text-white"><FileWarning className="w-12 h-12 mr-2"/>Web-URL fehlt für "{item.title || item.id}"</div>;
       default:
          console.warn(`[Display ${displayId}] Unsupported content type: ${item.type} for item "${item.title || item.id}"`);
         return (
           <div className="w-full h-full flex flex-col items-center justify-center bg-gray-700 text-yellow-300 p-4 text-center">
             <Tv2 className="w-16 h-16 mb-4" />
-            <p className="text-xl">Unsupported content type: {(item as any).type}</p>
-            <p>Item: "{item.title || item.id}"</p>
+            <p className="text-xl">Nicht unterstützter Inhaltstyp: {(item as any).type}</p>
+            <p>Element: "{item.title || item.id}"</p>
           </div>
         );
     }
@@ -380,14 +387,14 @@ export default function DisplayPage() {
       
       <button 
         onClick={() => navigate('prev')} 
-        aria-label="Previous Item"
+        aria-label="Vorheriges Element"
         className="absolute left-2 md:left-4 top-1/2 -translate-y-1/2 z-10 p-2 bg-black/30 text-white/80 rounded-full hover:bg-black/50 hover:text-white transition-all focus:outline-none focus:ring-2 focus:ring-accent focus:ring-opacity-70 opacity-0 group-hover:opacity-100 focus:opacity-100"
       >
         <ArrowLeftCircle size={32} />
       </button>
       <button 
         onClick={() => navigate('next')}
-        aria-label="Next Item"
+        aria-label="Nächstes Element"
         className="absolute right-2 md:right-4 top-1/2 -translate-y-1/2 z-10 p-2 bg-black/30 text-white/80 rounded-full hover:bg-black/50 hover:text-white transition-all focus:outline-none focus:ring-2 focus:ring-accent focus:ring-opacity-70 opacity-0 group-hover:opacity-100 focus:opacity-100"
       >
         <ArrowRightCircle size={32} />
@@ -395,7 +402,7 @@ export default function DisplayPage() {
 
       <button
         onClick={toggleFullscreen}
-        aria-label={isFullscreen ? "Exit Fullscreen" : "Enter Fullscreen"}
+        aria-label={isFullscreen ? "Vollbild Beenden" : "Vollbild Starten"}
         className="absolute bottom-2 right-2 md:bottom-4 md:right-4 z-10 p-2 bg-black/30 text-white/80 rounded-full hover:bg-black/50 hover:text-white transition-all focus:outline-none focus:ring-2 focus:ring-accent focus:ring-opacity-70 opacity-0 group-hover:opacity-100 focus:opacity-100"
       >
         {isFullscreen ? <Minimize size={28} /> : <Maximize size={28} />}
@@ -414,5 +421,3 @@ export default function DisplayPage() {
     </div>
   );
 }
-
-    
