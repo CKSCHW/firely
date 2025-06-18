@@ -1,6 +1,6 @@
 
 "use client";
-import { mockDevices, ensureDataLoaded, mockPlaylists } from '@/data/mockData';
+import { mockDevices, ensureDataLoaded, mockPlaylists, deleteMockDevice } from '@/data/mockData';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
@@ -10,20 +10,67 @@ import Link from 'next/link';
 import { formatDistanceToNow } from 'date-fns';
 import { useEffect, useState } from 'react';
 import type { DisplayDevice } from '@/lib/types';
+import { useToast } from '@/hooks/use-toast';
+import { useRouter } from 'next/navigation';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 
 export default function DevicesPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [devices, setDevices] = useState<DisplayDevice[]>([]);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const { toast } = useToast();
+  const router = useRouter();
 
   useEffect(() => {
     async function loadData() {
       setIsLoading(true);
       await ensureDataLoaded();
       setDevices([...mockDevices]);
+      // ensure mockPlaylists is also loaded if not done globally
+      // await ensureDataLoaded(); // or a specific playlist load if separated
       setIsLoading(false);
     }
     loadData();
   }, []);
+
+  const handleDeleteDevice = async (deviceId: string, deviceName?: string) => {
+    setIsDeleting(true);
+    try {
+      const success = await deleteMockDevice(deviceId);
+      if (success) {
+        toast({
+          title: "Device Deleted",
+          description: `Device "${deviceName || deviceId}" has been removed.`,
+        });
+        setDevices(prevDevices => prevDevices.filter(device => device.id !== deviceId));
+        router.refresh();
+      } else {
+        toast({
+          title: "Deletion Failed",
+          description: `Could not delete device "${deviceName || deviceId}". Device not found.`,
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+       toast({
+        title: "Deletion Error",
+        description: `An error occurred: ${error instanceof Error ? error.message : String(error)}`,
+        variant: "destructive",
+      });
+    } finally {
+      setIsDeleting(false);
+    }
+  };
 
   if (isLoading) {
     return (
@@ -42,7 +89,7 @@ export default function DevicesPage() {
             Monitor and manage your connected display devices.
           </p>
         </div>
-        <Link href="/admin/devices/register" asChild>
+        <Link href="/admin/devices/register" passHref>
           <Button variant="default" className="font-headline">
               <PlusCircle className="mr-2 h-5 w-5" />
               Register New Device
@@ -92,7 +139,7 @@ export default function DevicesPage() {
                         <Link href={`/admin/playlists/${device.currentPlaylistId}/edit`} className="hover:underline">{
                           mockPlaylists.find(p=>p.id === device.currentPlaylistId)?.name || device.currentPlaylistId
                         }</Link> 
-                        : 'N/A'}
+                        : <span className="italic">Not assigned</span>}
                     </TableCell>
                     <TableCell className="hidden lg:table-cell text-muted-foreground">
                       <div className="flex items-center">
@@ -101,14 +148,36 @@ export default function DevicesPage() {
                       </div>
                     </TableCell>
                     <TableCell className="text-right">
-                      <Button variant="ghost" size="icon" className="mr-1" disabled>
-                        <Edit className="h-4 w-4" />
-                        <span className="sr-only">Edit Device</span>
+                      <Button variant="ghost" size="icon" className="mr-1" asChild>
+                        <Link href={`/admin/devices/${device.id}/edit`}>
+                          <Edit className="h-4 w-4" />
+                          <span className="sr-only">Edit Device</span>
+                        </Link>
                       </Button>
-                      <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" disabled>
-                        <Trash2 className="h-4 w-4" />
-                        <span className="sr-only">Delete Device</span>
-                      </Button>
+                      <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                          <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" disabled={isDeleting}>
+                            <Trash2 className="h-4 w-4" />
+                            <span className="sr-only">Delete Device</span>
+                          </Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                          <AlertDialogHeader>
+                            <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+                            <AlertDialogDescription>
+                              This action cannot be undone. This will permanently delete the device
+                              "{device.name}".
+                            </AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <AlertDialogFooter>
+                            <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
+                            <AlertDialogAction onClick={() => handleDeleteDevice(device.id, device.name)} disabled={isDeleting}>
+                              {isDeleting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                              Delete
+                            </AlertDialogAction>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
                     </TableCell>
                   </TableRow>
                 ))}
