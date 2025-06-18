@@ -5,7 +5,7 @@ import { useEffect, useState, useCallback } from 'react';
 import Image from 'next/image';
 import type { Playlist, ContentItem, DisplayDevice, ScheduleEntry } from '@/lib/types';
 import { mockPlaylists, mockDevices, availableContentItems, ensureDataLoaded } from '@/data/mockData';
-import { ArrowLeftCircle, ArrowRightCircle, Loader2, AlertTriangle, EyeOff, Tv2, FileWarning } from 'lucide-react';
+import { ArrowLeftCircle, ArrowRightCircle, Loader2, AlertTriangle, EyeOff, Tv2, FileWarning, Maximize, Minimize } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
 
@@ -84,6 +84,39 @@ export default function DisplayPage({ params }: { params: { displayId: string } 
   const [error, setError] = useState<string | null>(null);
   const [isPaused, setIsPaused] = useState(false); 
   const [contentError, setContentError] = useState<string | null>(null);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+
+  const handleFullscreenChange = useCallback(() => {
+    setIsFullscreen(!!document.fullscreenElement);
+  }, []);
+
+  useEffect(() => {
+    // Check initial fullscreen state
+    setIsFullscreen(!!document.fullscreenElement);
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    return () => {
+      document.removeEventListener('fullscreenchange', handleFullscreenChange);
+    };
+  }, [handleFullscreenChange]);
+
+  const toggleFullscreen = useCallback(async () => {
+    if (!document.fullscreenElement) {
+      try {
+        await document.documentElement.requestFullscreen();
+      } catch (err) {
+        console.error(`Error attempting to enable full-screen mode: ${err instanceof Error ? err.message : String(err)}`);
+      }
+    } else {
+      if (document.exitFullscreen) {
+        try {
+          await document.exitFullscreen();
+        } catch (err) {
+          console.error(`Error attempting to exit full-screen mode: ${err instanceof Error ? err.message : String(err)}`);
+        }
+      }
+    }
+  }, []);
+
 
   const fetchAndSetPlaylist = useCallback(async () => {
     setLoading(true);
@@ -300,6 +333,15 @@ export default function DisplayPage({ params }: { params: { displayId: string } 
         className="absolute right-2 md:right-4 top-1/2 -translate-y-1/2 z-10 p-2 bg-black/30 text-white/80 rounded-full hover:bg-black/50 hover:text-white transition-all focus:outline-none focus:ring-2 focus:ring-accent focus:ring-opacity-70 opacity-0 group-hover:opacity-100 focus:opacity-100"
       >
         <ArrowRightCircle size={32} />
+      </button>
+
+      {/* Fullscreen Toggle Button */}
+      <button
+        onClick={toggleFullscreen}
+        aria-label={isFullscreen ? "Exit Fullscreen" : "Enter Fullscreen"}
+        className="absolute bottom-2 right-2 md:bottom-4 md:right-4 z-10 p-2 bg-black/30 text-white/80 rounded-full hover:bg-black/50 hover:text-white transition-all focus:outline-none focus:ring-2 focus:ring-accent focus:ring-opacity-70 opacity-0 group-hover:opacity-100 focus:opacity-100"
+      >
+        {isFullscreen ? <Minimize size={28} /> : <Maximize size={28} />}
       </button>
 
       {/* Content Title Overlay - only if title exists and no content error for current item */}
