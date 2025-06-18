@@ -1,29 +1,34 @@
 
-"use client"; // Ensure this is a client component if using hooks like useParams or useEffect for data fetching
+"use client"; 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Loader2 } from "lucide-react";
 import PlaylistForm from "@/components/admin/PlaylistForm"; 
 import { mockPlaylists, ensureDataLoaded } from "@/data/mockData"; 
 import { useEffect, useState } from "react";
 import type { Playlist } from "@/lib/types";
-import { Loader2 } from "lucide-react";
+import { useParams } from 'next/navigation';
 
-export default function EditPlaylistPage({ params }: { params: { playlistId: string } }) {
-  const [playlist, setPlaylist] = useState<Playlist | undefined | null>(undefined); // undefined: loading, null: not found
+export default function EditPlaylistPage() {
+  const paramsHook = useParams<{ playlistId: string }>();
+  const playlistId = paramsHook.playlistId;
+
+  const [playlist, setPlaylist] = useState<Playlist | undefined | null>(undefined); 
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     async function loadPlaylist() {
       setIsLoading(true);
-      await ensureDataLoaded(); // Make sure all data is loaded from files
-      const foundPlaylist = mockPlaylists.find(p => p.id === params.playlistId);
+      await ensureDataLoaded(); 
+      const foundPlaylist = mockPlaylists.find(p => p.id === playlistId);
       setPlaylist(foundPlaylist || null);
       setIsLoading(false);
     }
-    loadPlaylist();
-  }, [params.playlistId]);
+    if (playlistId) {
+      loadPlaylist();
+    }
+  }, [playlistId]);
   
   if (isLoading || playlist === undefined) {
     return (
@@ -86,8 +91,7 @@ export default function EditPlaylistPage({ params }: { params: { playlistId: str
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <PlaylistForm playlistId={params.playlistId} />
-           {/* Submit buttons are now part of PlaylistForm itself */}
+          <PlaylistForm playlistId={playlistId} />
         </CardContent>
       </Card>
     </div>

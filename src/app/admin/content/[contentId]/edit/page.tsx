@@ -1,15 +1,44 @@
 
+"use client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
-import { ArrowLeft, LibraryBig } from "lucide-react";
+import { ArrowLeft, LibraryBig, Loader2 } from "lucide-react";
 import ContentItemForm from "@/components/admin/ContentItemForm";
-import { availableContentItems } from "@/data/mockData";
+import { availableContentItems, ensureDataLoaded } from "@/data/mockData";
+import { useParams } from 'next/navigation';
+import { useEffect, useState } from "react";
+import type { ContentItem } from "@/lib/types";
 
-export default function EditContentItemPage({ params }: { params: { contentId: string } }) {
-  const contentItem = availableContentItems.find(c => c.id === params.contentId);
+export default function EditContentItemPage() {
+  const paramsHook = useParams<{ contentId: string }>();
+  const contentId = paramsHook.contentId;
+
+  const [contentItem, setContentItem] = useState<ContentItem | null | undefined>(undefined);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    async function loadContentItem() {
+      setIsLoading(true);
+      await ensureDataLoaded();
+      const foundItem = availableContentItems.find(c => c.id === contentId);
+      setContentItem(foundItem || null);
+      setIsLoading(false);
+    }
+    if (contentId) {
+      loadContentItem();
+    }
+  }, [contentId]);
+
+  if (isLoading || contentItem === undefined) {
+    return (
+      <div className="flex justify-center items-center min-h-[calc(100vh-200px)]">
+        <Loader2 className="h-12 w-12 animate-spin text-primary" />
+      </div>
+    );
+  }
   
-  if (!contentItem) {
+  if (contentItem === null) {
     return (
       <div className="space-y-6">
         <div className="flex items-center gap-4">
@@ -64,8 +93,7 @@ export default function EditContentItemPage({ params }: { params: { contentId: s
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <ContentItemForm contentId={params.contentId} />
-          {/* Submit buttons are now part of ContentItemForm itself */}
+          <ContentItemForm contentId={contentId} />
         </CardContent>
       </Card>
     </div>

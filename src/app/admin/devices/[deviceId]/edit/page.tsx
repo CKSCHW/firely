@@ -8,8 +8,12 @@ import DeviceEditForm from "@/components/admin/DeviceEditForm";
 import { mockDevices, ensureDataLoaded } from "@/data/mockData";
 import { useEffect, useState } from "react";
 import type { DisplayDevice } from "@/lib/types";
+import { useParams } from 'next/navigation';
 
-export default function EditDevicePage({ params }: { params: { deviceId: string } }) {
+export default function EditDevicePage() {
+  const paramsHook = useParams<{ deviceId: string }>();
+  const deviceId = paramsHook.deviceId;
+
   const [device, setDevice] = useState<DisplayDevice | undefined | null>(undefined); // undefined: loading, null: not found
   const [isLoading, setIsLoading] = useState(true);
 
@@ -17,12 +21,14 @@ export default function EditDevicePage({ params }: { params: { deviceId: string 
     async function loadDevice() {
       setIsLoading(true);
       await ensureDataLoaded();
-      const foundDevice = mockDevices.find(d => d.id === params.deviceId);
+      const foundDevice = mockDevices.find(d => d.id === deviceId);
       setDevice(foundDevice || null);
       setIsLoading(false);
     }
-    loadDevice();
-  }, [params.deviceId]);
+    if (deviceId) {
+      loadDevice();
+    }
+  }, [deviceId]);
 
   if (isLoading || device === undefined) {
     return (
@@ -87,7 +93,7 @@ export default function EditDevicePage({ params }: { params: { deviceId: string 
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <DeviceEditForm deviceId={params.deviceId} />
+          <DeviceEditForm deviceId={deviceId} />
         </CardContent>
       </Card>
     </div>
