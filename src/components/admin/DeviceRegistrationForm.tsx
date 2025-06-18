@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import {
   Form,
   FormControl,
+  FormDescription,
   FormField,
   FormItem,
   FormLabel,
@@ -21,6 +22,11 @@ import { Loader2 } from "lucide-react";
 import { registerDeviceAction } from "@/app/admin/devices/actions";
 
 const formSchema = z.object({
+  deviceId: z.string().min(3, {
+    message: "Device ID must be at least 3 characters.",
+  }).regex(/^[a-zA-Z0-9_-]+$/, {
+    message: "Device ID can only contain letters, numbers, underscores, and hyphens."
+  }),
   deviceName: z.string().min(3, {
     message: "Device name must be at least 3 characters.",
   }),
@@ -34,6 +40,7 @@ export default function DeviceRegistrationForm() {
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
     defaultValues: {
+      deviceId: "",
       deviceName: "",
     },
   });
@@ -51,7 +58,7 @@ export default function DeviceRegistrationForm() {
       } else {
         toast({
           title: "Device Registration Submitted",
-          description: `Device "${values.deviceName}" registration processing.`,
+          description: `Device "${values.deviceName}" with ID "${values.deviceId}" registration processing.`,
         });
         // Redirect is handled by server action
       }
@@ -71,13 +78,32 @@ export default function DeviceRegistrationForm() {
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
         <FormField
           control={form.control}
+          name="deviceId"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Device ID</FormLabel>
+              <FormControl>
+                <Input placeholder="e.g., lobby-screen-01" {...field} disabled={isSubmitting} />
+              </FormControl>
+              <FormDescription>
+                Unique identifier for the device (e.g., 'entrance-display', 'meeting-room-tv'). Allowed characters: a-z, A-Z, 0-9, _, -.
+              </FormDescription>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+        <FormField
+          control={form.control}
           name="deviceName"
           render={({ field }) => (
             <FormItem>
               <FormLabel>Device Name</FormLabel>
               <FormControl>
-                <Input placeholder="e.g., Lobby Screen Main" {...field} disabled={isSubmitting} />
+                <Input placeholder="e.g., Main Lobby Screen (East Wing)" {...field} disabled={isSubmitting} />
               </FormControl>
+               <FormDescription>
+                A descriptive name for easier identification.
+              </FormDescription>
               <FormMessage />
             </FormItem>
           )}

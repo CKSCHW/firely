@@ -41,6 +41,11 @@ export async function updateDeviceAction(
 }
 
 const registerDeviceFormSchema = z.object({
+  deviceId: z.string().min(3, {
+    message: "Device ID must be at least 3 characters.",
+  }).regex(/^[a-zA-Z0-9_-]+$/, {
+    message: "Device ID can only contain letters, numbers, underscores, and hyphens."
+  }),
   deviceName: z.string().min(3, {
     message: "Device name must be at least 3 characters.",
   }),
@@ -48,7 +53,10 @@ const registerDeviceFormSchema = z.object({
 
 export async function registerDeviceAction(values: z.infer<typeof registerDeviceFormSchema>) {
   try {
-    await addMockDevice(values.deviceName);
+    const result = await addMockDevice(values.deviceId, values.deviceName);
+    if (result.success === false) {
+      return { success: false, message: result.message };
+    }
   } catch (error) {
     console.error("Error registering device action:", error);
     return { success: false, message: error instanceof Error ? error.message : 'Registration failed due to an unexpected error.' };

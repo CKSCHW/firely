@@ -2,7 +2,7 @@
 import type { Playlist, DisplayDevice, ContentItem, AvailableContent, ScheduleEntry } from '@/lib/types';
 import { v4 as uuidv4 } from 'uuid';
 import { db, isFirebaseConfigured } from '@/lib/firebase'; // Import Firestore instance
-import { collection, doc, setDoc, getDocs, deleteDoc, writeBatch, query, FieldValue } from 'firebase/firestore';
+import { collection, doc, setDoc, getDoc, getDocs, deleteDoc, writeBatch, query, FieldValue } from 'firebase/firestore';
 
 // Helper function to remove undefined properties from an object
 function removeUndefinedProps(obj: any): any {
@@ -191,41 +191,48 @@ export async function ensureDataLoaded() {
 
 // --- Mutator Functions ---
 
-export async function addMockDevice(name: string): Promise<DisplayDevice> {
+export async function addMockDevice(deviceId: string, name: string): Promise<{ success: boolean; device?: DisplayDevice; message?: string }> {
   await ensureDataLoaded();
-  const deviceId = `display-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
   const currentTime = new Date().toISOString();
-
-  // Object to be stored in Firestore. Explicitly omits currentPlaylistId.
-  const firestoreData: Omit<DisplayDevice, 'id' | 'currentPlaylistId' | 'status' | 'lastSeen' | 'schedule'> & { name: string, status: 'online' | 'offline', lastSeen: string, schedule: ScheduleEntry[], currentPlaylistId?: string } = {
-    name,
-    status: 'online',
-    lastSeen: currentTime,
-    schedule: [],
-    // currentPlaylistId is intentionally NOT included here
-  };
-
-  // Full object for in-memory cache and return type, matches DisplayDevice type.
-  const newDeviceInMemory: DisplayDevice = {
-    id: deviceId,
-    name,
-    status: 'online',
-    lastSeen: currentTime,
-    // currentPlaylistId is implicitly undefined here, which is fine for the TS type.
-    schedule: [],
-  };
 
   if (isFirebaseConfigured && db) {
     try {
-      // Pass the explicitly constructed firestoreData, still wrapped in removeUndefinedProps for other potential fields.
-      await setDoc(doc(db, 'devices', deviceId), removeUndefinedProps(firestoreData));
+      const deviceDocRef = doc(db, 'devices', deviceId);
+      const deviceDocSnap = await getDoc(deviceDocRef);
+      if (deviceDocSnap.exists()) {
+        return { success: false, message: `Device with ID "${deviceId}" already exists.` };
+      }
+      
+      // Object to be stored in Firestore. currentPlaylistId is intentionally omitted for new devices.
+      const firestoreData = {
+        name,
+        status: 'online' as 'online' | 'offline', // Type assertion
+        lastSeen: currentTime,
+        schedule: [] as ScheduleEntry[],
+      };
+      await setDoc(deviceDocRef, removeUndefinedProps(firestoreData));
     } catch (error) {
       console.error("Error adding device to Firestore: ", error);
       throw error; // Re-throw to be caught by the server action
     }
   }
-  mockDevices.push(newDeviceInMemory); 
-  return newDeviceInMemory;
+
+  // Full object for in-memory cache and return type.
+  const newDeviceInMemory: DisplayDevice = {
+    id: deviceId,
+    name,
+    status: 'online',
+    lastSeen: currentTime,
+    schedule: [],
+  };
+  const existingInMemoryDeviceIndex = mockDevices.findIndex(d => d.id === deviceId);
+  if (existingInMemoryDeviceIndex > -1) {
+     // This case should ideally not be hit if Firestore check is primary
+     mockDevices[existingInMemoryDeviceIndex] = newDeviceInMemory;
+  } else {
+    mockDevices.push(newDeviceInMemory);
+  }
+  return { success: true, device: newDeviceInMemory };
 }
 
 
@@ -240,19 +247,17 @@ export async function updateMockDevice(deviceId: string, updates: Partial<Omit<D
   // Construct the full updated object for in-memory
    const updatedDeviceInMemory: DisplayDevice = {
     ...mockDevices[deviceIndex],
-    name: updates.name ?? mockDevices[deviceIndex].name,
-    currentPlaylistId: 'currentPlaylistId' in updates ? updates.currentPlaylistId : mockDevices[deviceIndex].currentPlaylistId, // Handle explicit undefined
-    schedule: updates.schedule ?? mockDevices[deviceIndex].schedule,
-    lastSeen: new Date().toISOString(), // Or keep original if not meant to update on every change
+    name: updates.name !== undefined ? updates.name : mockDevices[deviceIndex].name,
+    currentPlaylistId: 'currentPlaylistId' in updates ? updates.currentPlaylistId : mockDevices[deviceIndex].currentPlaylistId,
+    schedule: updates.schedule !== undefined ? updates.schedule : mockDevices[deviceIndex].schedule,
+    lastSeen: new Date().toISOString(), 
   };
 
 
   if (isFirebaseConfigured && db) {
     try {
-      // For Firestore, send only the 'updates' object, cleaned of undefined values.
-      // Firestore's merge:true will handle applying these changes to the existing document.
       const firestoreUpdates = removeUndefinedProps(updates);
-      if (Object.keys(firestoreUpdates).length > 0) { // Only update if there are actual changes
+      if (Object.keys(firestoreUpdates).length > 0) { 
         await setDoc(doc(db, 'devices', deviceId), firestoreUpdates, { merge: true });
       }
     } catch (error) {
@@ -437,5 +442,3 @@ export async function deleteMockContentItem(contentId: string): Promise<boolean>
   reSyncAiAvailableContent();
   return true;
 }
-
-    
