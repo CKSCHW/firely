@@ -23,7 +23,7 @@ export async function updateDeviceAction(
   try {
     const result = await updateMockDevice(deviceId, {
       name: values.deviceName,
-      currentPlaylistId: values.currentPlaylistId || undefined, // Ensure undefined if empty string
+      currentPlaylistId: values.currentPlaylistId || undefined, 
       schedule: schedule,
     });
 
@@ -55,13 +55,18 @@ export async function registerDeviceAction(values: z.infer<typeof registerDevice
   try {
     const result = await addMockDevice(values.deviceId, values.deviceName);
     if (result.success === false) {
+      // If addMockDevice indicates a failure (e.g., ID exists, Firestore error), return the error message
       return { success: false, message: result.message };
     }
+    // If addMockDevice was successful (result.success is true or not explicitly false)
+    // then proceed to revalidate and redirect.
   } catch (error) {
+    // Catch any unexpected errors during the addMockDevice call or other logic
     console.error("Error registering device action:", error);
     return { success: false, message: error instanceof Error ? error.message : 'Registration failed due to an unexpected error.' };
   }
 
+  // Only redirect if the try block completed successfully without returning an error object.
   revalidatePath('/admin/devices');
   redirect('/admin/devices');
 }
@@ -79,8 +84,6 @@ export async function updateDeviceHeartbeatAction(deviceId: string) {
       return { success: false, message: 'Device not found or heartbeat update failed.' };
     }
     console.log(`Server Action: Heartbeat successful for device ${deviceId}`);
-    // No revalidation needed here as it's a frequent, minor update primarily for status.
-    // The devices page revalidates on its own load or via other actions.
     return { success: true };
   } catch (error) {
     console.error(`Server Action: Error processing heartbeat for device ${deviceId}:`, error);
