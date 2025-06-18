@@ -3,27 +3,48 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import Image from 'next/image';
-import type { Playlist, ContentItem, DisplayDevice } from '@/lib/types';
+import type { Playlist, ContentItem, DisplayDevice, ScheduleEntry } from '@/lib/types';
 import { mockPlaylists, mockDevices, availableContentItems, ensureDataLoaded } from '@/data/mockData';
 import { ArrowLeftCircle, ArrowRightCircle, Loader2, AlertTriangle, EyeOff, Tv2, FileWarning } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
 
-async function getPlaylistForDisplay(displayId: string): Promise<Playlist | null> {
-  await ensureDataLoaded(); // Ensure all data is loaded from files
+function timeToMinutes(timeStr: string): number { // HH:MM
+  const [hours, minutes] = timeStr.split(':').map(Number);
+  return hours * 60 + minutes;
+}
+
+async function getActivePlaylistForDisplay(displayId: string): Promise<Playlist | null> {
+  await ensureDataLoaded(); 
   
   const device = mockDevices.find(d => d.id === displayId);
-  if (!device || !device.currentPlaylistId) return null;
+  if (!device) return null;
+
+  let activePlaylistId: string | undefined = device.currentPlaylistId; // Start with fallback
+
+  if (device.schedule && device.schedule.length > 0) {
+    const now = new Date();
+    const currentDay = now.getDay(); // 0 (Sunday) - 6 (Saturday)
+    const currentTimeInMinutes = now.getHours() * 60 + now.getMinutes();
+
+    for (const entry of device.schedule) {
+      if (entry.daysOfWeek.includes(currentDay)) {
+        const startTimeInMinutes = timeToMinutes(entry.startTime);
+        const endTimeInMinutes = timeToMinutes(entry.endTime);
+        if (currentTimeInMinutes >= startTimeInMinutes && currentTimeInMinutes <= endTimeInMinutes) {
+          activePlaylistId = entry.playlistId;
+          break; // Found an active scheduled playlist
+        }
+      }
+    }
+  }
   
-  const playlistFromMock = mockPlaylists.find(p => p.id === device.currentPlaylistId);
+  if (!activePlaylistId) return null; // No fallback and no active schedule
+
+  const playlistFromMock = mockPlaylists.find(p => p.id === activePlaylistId);
   if (!playlistFromMock) return null;
 
-  // Ensure items are fully populated. In the new file-based system,
-  // playlist.items might just be stored as references or partial objects.
-  // We need to resolve them against the full availableContentItems list.
   const populatedItems = playlistFromMock.items.map(itemRefOrItem => {
-    // If itemRefOrItem is just an ID (or a simple object with an ID), find the full item.
-    // If it's already a full item (e.g., if mockPlaylists was constructed with full items), use it.
     const fullItem = availableContentItems.find(ci => ci.id === (typeof itemRefOrItem === 'string' ? itemRefOrItem : itemRefOrItem.id));
     return fullItem;
   }).filter(Boolean) as ContentItem[];
@@ -46,18 +67,18 @@ export default function DisplayPage({ params }: { params: { displayId: string } 
     setError(null);
     setContentError(null);
     try {
-      const data = await getPlaylistForDisplay(params.displayId);
+      const data = await getActivePlaylistForDisplay(params.displayId);
       if (data && data.items.length > 0) {
         setPlaylist(data);
         setCurrentItemIndex(0); 
       } else if (data && data.items.length === 0) {
-        setError("Playlist is empty. Please add content.");
+        setError("Active playlist is empty. Please add content or check schedule.");
       } else {
         const deviceExists = mockDevices.some(d => d.id === params.displayId);
         if (!deviceExists) {
           setError("Display ID not found. Cannot load playlist.");
         } else {
-           setError("Playlist not found or display not configured with a valid playlist.");
+           setError("No active playlist found. Check device schedule and fallback configuration.");
         }
       }
     } catch (e) {
@@ -71,6 +92,10 @@ export default function DisplayPage({ params }: { params: { displayId: string } 
 
   useEffect(() => {
     fetchAndSetPlaylist();
+    // Set up an interval to re-check the active playlist periodically (e.g., every minute)
+    // This ensures the display updates if a new schedule entry becomes active
+    const scheduleCheckInterval = setInterval(fetchAndSetPlaylist, 60 * 1000); 
+    return () => clearInterval(scheduleCheckInterval);
   }, [fetchAndSetPlaylist]);
 
   const advanceToNextItem = useCallback(() => {
@@ -134,7 +159,7 @@ export default function DisplayPage({ params }: { params: { displayId: string } 
       <div className="fixed inset-0 bg-gray-800 flex flex-col items-center justify-center text-slate-300 p-8 text-center">
         <EyeOff className="w-24 h-24 text-slate-500 mb-6" />
         <p className="mt-4 text-3xl font-headline">No Content to Display</p>
-        <p className="font-body text-slate-400 mt-2 text-lg">The assigned playlist is empty or could not be loaded.</p>
+        <p className="font-body text-slate-400 mt-2 text-lg">No playlist is currently scheduled or the active playlist is empty.</p>
         <Button onClick={fetchAndSetPlaylist} variant="outline" className="mt-8 text-slate-300 border-slate-500 hover:bg-gray-700 hover:text-slate-100">
           Retry Loading
         </Button>
@@ -237,4 +262,3 @@ export default function DisplayPage({ params }: { params: { displayId: string } 
     </div>
   );
 }
-

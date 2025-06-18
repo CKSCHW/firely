@@ -7,6 +7,14 @@ export interface ContentItem {
   dataAiHint?: string; // For placeholder images on Unsplash
 }
 
+export interface ScheduleEntry {
+  id: string; // Unique ID for the schedule entry
+  playlistId: string;
+  startTime: string; // HH:MM format
+  endTime: string; // HH:MM format
+  daysOfWeek: number[]; // 0 (Sunday) to 6 (Saturday)
+}
+
 export interface Playlist {
   id:string;
   name: string;
@@ -21,7 +29,8 @@ export interface DisplayDevice {
   name: string;
   status: 'online' | 'offline';
   lastSeen: string; // ISO date string
-  currentPlaylistId?: string;
+  currentPlaylistId?: string; // Fallback playlist
+  schedule?: ScheduleEntry[];
 }
 
 export interface AvailableContent {

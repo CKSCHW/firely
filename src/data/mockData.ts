@@ -1,5 +1,6 @@
 
-import type { Playlist, DisplayDevice, ContentItem, AvailableContent } from '@/lib/types';
+import type { Playlist, DisplayDevice, ContentItem, AvailableContent, ScheduleEntry } from '@/lib/types';
+import { v4 as uuidv4 } from 'uuid';
 
 // Initial default data (used if JSON files don't exist or are empty, or on client-side if FS ops are skipped)
 const defaultContentItems: ContentItem[] = [
@@ -41,6 +42,9 @@ const defaultDevices: DisplayDevice[] = [
     status: 'online',
     lastSeen: new Date().toISOString(),
     currentPlaylistId: 'playlist-1',
+    schedule: [
+      { id: uuidv4(), playlistId: 'playlist-2', startTime: '09:00', endTime: '17:00', daysOfWeek: [1,2,3,4,5] } // Mon-Fri, 9 AM - 5 PM
+    ]
   },
   {
     id: 'display-102',
@@ -48,13 +52,18 @@ const defaultDevices: DisplayDevice[] = [
     status: 'offline',
     lastSeen: new Date(Date.now() - 1000 * 60 * 60 * 3).toISOString(),
     currentPlaylistId: 'playlist-2',
+    schedule: []
   },
    {
     id: 'sample-display-1',
     name: 'Sample Demo Display',
     status: 'online',
     lastSeen: new Date().toISOString(),
-    currentPlaylistId: 'playlist-1'
+    currentPlaylistId: 'playlist-1',
+    schedule: [
+      { id: uuidv4(), playlistId: 'playlist-2', startTime: '08:00', endTime: '12:00', daysOfWeek: [1,2,3,4,5] }, // Mon-Fri, 8 AM - 12 PM
+      { id: uuidv4(), playlistId: 'playlist-1', startTime: '12:01', endTime: '18:00', daysOfWeek: [1,2,3,4,5] }  // Mon-Fri, 12:01 PM - 6 PM
+    ]
   }
 ];
 
@@ -74,7 +83,7 @@ async function writeDataInternal<T>(
     filePath: string,
     data: T[],
     fsMod: any, // typeof import('fs/promises')
-    _pathMod: any, // typeof import('path')
+    pathMod: any, // typeof import('path')
     dataDir: string
 ): Promise<void> {
   if (typeof window === 'undefined') { // Server-side only
@@ -90,30 +99,43 @@ async function writeDataInternal<T>(
 // Helper function to read JSON data from a file (SERVER-SIDE ONLY for FS access)
 async function readData<T>(fileName: string, defaultData: T[] = []): Promise<T[]> {
   if (typeof window !== 'undefined') {
-    return JSON.parse(JSON.stringify(defaultData)); // Client-side, return default
+    // Client-side, return a deep copy of defaultData to prevent shared mutable state
+    return JSON.parse(JSON.stringify(defaultData));
   }
 
   // Server-side execution
+  let fsPromises, path;
   try {
-    const fsPromises = await import('fs/promises');
-    const path = await import('path');
+    fsPromises = await import('fs/promises');
+    path = await import('path');
     const dataDirLocal = path.join(process.cwd(), 'src', 'data');
     const filePathLocal = path.join(dataDirLocal, fileName);
 
-    await fsPromises.mkdir(dataDirLocal, { recursive: true });
-    const fileContent = await fsPromises.readFile(filePathLocal, 'utf-8');
-    const data = JSON.parse(fileContent);
-    return Array.isArray(data) && data.length > 0 ? data : JSON.parse(JSON.stringify(defaultData));
-  } catch (error: any) {
-    if (error.code === 'ENOENT' && defaultData.length > 0 && typeof window === 'undefined') {
-      const fsPromises = await import('fs/promises');
-      const path = await import('path');
-      const dataDirLocal = path.join(process.cwd(), 'src', 'data');
-      const filePathLocal = path.join(dataDirLocal, fileName);
-      await writeDataInternal(filePathLocal, defaultData, fsPromises, path, dataDirLocal);
+    try {
+      await fsPromises.mkdir(dataDirLocal, { recursive: true });
+      const fileContent = await fsPromises.readFile(filePathLocal, 'utf-8');
+      const data = JSON.parse(fileContent);
+      // Ensure data is an array and not empty, otherwise use default and write it back
+      if (Array.isArray(data) && data.length > 0) {
+        return data;
+      } else {
+        // If file is empty or not an array, write defaultData and return it
+        await writeDataInternal(filePathLocal, defaultData, fsPromises, path, dataDirLocal);
+        return JSON.parse(JSON.stringify(defaultData));
+      }
+    } catch (error: any) {
+      // If file doesn't exist, create it with defaultData
+      if (error.code === 'ENOENT' && defaultData.length > 0) {
+        await writeDataInternal(filePathLocal, defaultData, fsPromises, path, dataDirLocal);
+        return JSON.parse(JSON.stringify(defaultData));
+      }
+      // For other errors, log and return defaultData
+      console.error(`Error reading or processing data from ${fileName} (server-side):`, error);
       return JSON.parse(JSON.stringify(defaultData));
     }
-    console.error(`Error reading data from ${fileName} (server-side):`, error);
+  } catch (e) {
+    // This catch is for errors during dynamic import of 'fs/promises' or 'path'
+    console.error(`Failed to import fs/promises or path on server:`, e);
     return JSON.parse(JSON.stringify(defaultData));
   }
 }
@@ -121,22 +143,20 @@ async function readData<T>(fileName: string, defaultData: T[] = []): Promise<T[]
 
 // Helper function to write JSON data to a file (SERVER-SIDE ONLY for FS access)
 async function writeDataToFile<T>(fileName: string, data: T[]): Promise<void> {
-  if (typeof window !== 'undefined') {
+  if (typeof window === 'undefined') { // Server-side only
+    try {
+      const fsPromises = await import('fs/promises');
+      const path = await import('path');
+      const dataDirLocal = path.join(process.cwd(), 'src', 'data');
+      const filePathLocal = path.join(dataDirLocal, fileName);
+      
+      await fsPromises.mkdir(dataDirLocal, { recursive: true });
+      await fsPromises.writeFile(filePathLocal, JSON.stringify(data, null, 2), 'utf-8');
+    } catch (error) {
+      console.error(`Error writing data to ${fileName} (server-side):`, error);
+    }
+  } else {
     console.warn(`File system write for ${fileName} skipped on client-side.`);
-    return;
-  }
-
-  // Server-side execution
-  try {
-    const fsPromises = await import('fs/promises');
-    const path = await import('path');
-    const dataDirLocal = path.join(process.cwd(), 'src', 'data');
-    const filePathLocal = path.join(dataDirLocal, fileName);
-    
-    await fsPromises.mkdir(dataDirLocal, { recursive: true });
-    await fsPromises.writeFile(filePathLocal, JSON.stringify(data, null, 2), 'utf-8');
-  } catch (error) {
-    console.error(`Error writing data to ${fileName} (server-side):`, error);
   }
 }
 
@@ -171,26 +191,28 @@ export async function addMockDevice(name: string): Promise<DisplayDevice> {
   const newDevice: DisplayDevice = {
     id: `display-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
     name,
-    status: 'online', // Default status for new devices
+    status: 'online', 
     lastSeen: new Date().toISOString(),
-    currentPlaylistId: undefined, // No playlist assigned initially
+    currentPlaylistId: undefined, 
+    schedule: [],
   };
   mockDevices.push(newDevice);
   await writeDataToFile(devicesJsonFile, mockDevices);
   return newDevice;
 }
 
-export async function updateMockDevice(id: string, updates: Partial<Omit<DisplayDevice, 'id' | 'lastSeen' | 'status'>>): Promise<DisplayDevice | undefined> {
+export async function updateMockDevice(id: string, updates: Partial<Omit<DisplayDevice, 'id' | 'lastSeen' | 'status'>> & { schedule?: ScheduleEntry[] }): Promise<DisplayDevice | undefined> {
   await ensureDataLoaded();
   const deviceIndex = mockDevices.findIndex(d => d.id === id);
   if (deviceIndex === -1) {
     return undefined;
   }
-  // Preserve existing status and lastSeen, only update name and currentPlaylistId
+  
   mockDevices[deviceIndex] = {
     ...mockDevices[deviceIndex],
     name: updates.name ?? mockDevices[deviceIndex].name,
-    currentPlaylistId: updates.currentPlaylistId // Allows setting to undefined to remove playlist
+    currentPlaylistId: updates.currentPlaylistId, // Allows setting to undefined to remove playlist
+    schedule: updates.schedule ?? mockDevices[deviceIndex].schedule, // Update schedule
   };
   await writeDataToFile(devicesJsonFile, mockDevices);
   return mockDevices[deviceIndex];
