@@ -30,7 +30,7 @@ const contentItemFormSchema = z.object({
   type: z.enum(["image", "video", "web", "pdf"], {
     required_error: "You need to select a content type.",
   }),
-  url: z.string().min(1, { message: "Content source/URL is required." }),
+  url: z.string().optional(), // Made URL optional here for client-side validation
   duration: z.coerce.number().min(1, { message: "Duration must be at least 1 second." }),
   dataAiHint: z.string().optional().refine(value => !value || value.split(' ').length <= 2, {
     message: "AI hint can have at most two words."
@@ -120,19 +120,28 @@ export default function ContentItemForm({ contentId }: ContentItemFormProps) {
       const file = event.target.files[0];
       setSelectedFile(file);
       const localPreview = URL.createObjectURL(file);
-      if (form.getValues("type") === "image") { // Use form.getValues for latest type
+      if (form.getValues("type") === "image") {
         setPreviewUrl(localPreview);
+        form.setValue("url", localPreview, { shouldValidate: false, shouldDirty: true }); // Set for preview, don't validate yet
+      } else {
+        form.setValue("url", "", { shouldValidate: false }); // Clear URL if file is for non-image, to rely on upload
       }
-      // Set the form's URL field to the blob URL temporarily for image preview if needed,
-      // or just hold onto selectedFile and handle upload + URL setting in onSubmit.
-      // For this server action approach, we'll pass the final URL after upload.
-      // The `url` field in the form will be set from the server response or direct input.
+    } else {
+      setSelectedFile(null);
+      // If file is cleared, revert URL to persisted URL if in edit mode, or clear it
+      if (isEditMode && currentPersistedUrl) {
+        form.setValue("url", currentPersistedUrl, { shouldValidate: true, shouldDirty: true });
+         if (form.getValues("type") === "image") setPreviewUrl(currentPersistedUrl);
+      } else {
+        form.setValue("url", "", { shouldValidate: true, shouldDirty: true });
+         if (form.getValues("type") === "image") setPreviewUrl(undefined);
+      }
     }
-  }, [form]);
+  }, [form, isEditMode, currentPersistedUrl]);
 
-  async function onSubmit(values: ContentItemFormValues) {
+  async function onSubmit(values: ContentItemFormValues) { // values.url might be undefined
     setIsProcessing(true);
-    let finalUrl = values.url; 
+    let finalDeterminedUrl = values.url; // Initialize with URL from form field (if any, could be blob)
 
     if (selectedFile && (values.type === 'image' || values.type === 'video' || values.type === 'pdf')) {
       const formData = new FormData();
@@ -148,7 +157,7 @@ export default function ContentItemForm({ contentId }: ContentItemFormProps) {
         if (!response.ok || !result.success) {
           throw new Error(result.error || 'File upload failed');
         }
-        finalUrl = result.url; 
+        finalDeterminedUrl = result.url; // URL from successful upload
       } catch (error) {
         const message = error instanceof Error ? error.message : "File upload failed.";
         toast({
@@ -159,18 +168,46 @@ export default function ContentItemForm({ contentId }: ContentItemFormProps) {
         setIsProcessing(false);
         return;
       }
-    } else if (values.type === 'web' && !values.url.startsWith('http')) {
-        toast({
-          title: "Invalid URL",
-          description: "Web content URL must start with http or https.",
-          variant: "destructive",
-        });
-        setIsProcessing(false);
-        return;
     }
 
-    // Prepare values for the server action, ensuring finalUrl is used.
-    const actionValues: ContentItemFormValues = { ...values, url: finalUrl };
+    // Validate that we have a final URL before proceeding
+    if (!finalDeterminedUrl || finalDeterminedUrl.trim() === '' || finalDeterminedUrl.startsWith('blob:')) {
+      // If finalDeterminedUrl is still a blob URL, it means upload didn't happen for it
+      // or it was a preview that shouldn't be saved.
+      let userMessage = "Content source/URL is required. Please upload a file or provide a valid direct URL.";
+      if (values.type === 'web') {
+        userMessage = "Web content URL is required and must start with http or https.";
+      } else if (finalDeterminedUrl && finalDeterminedUrl.startsWith('blob:')) {
+         userMessage = "File selected for preview, but an error occurred. Please try uploading again or provide a direct URL."
+      }
+      
+      toast({
+        title: "Missing Or Invalid Content URL",
+        description: userMessage,
+        variant: "destructive",
+      });
+      setIsProcessing(false);
+      return;
+    }
+
+    if (values.type === 'web' && !finalDeterminedUrl.startsWith('http')) {
+      toast({
+        title: "Invalid URL Format",
+        description: "Web content URL must start with http or https.",
+        variant: "destructive",
+      });
+      setIsProcessing(false);
+      return;
+    }
+    
+    // Server action expects a string URL.
+    const actionValues = { 
+        title: values.title,
+        type: values.type,
+        url: finalDeterminedUrl, // This is now guaranteed to be a non-empty string
+        duration: values.duration,
+        dataAiHint: values.dataAiHint
+     };
 
     try {
       let actionResult;
@@ -191,7 +228,6 @@ export default function ContentItemForm({ contentId }: ContentItemFormProps) {
           title: isEditMode ? "Content Item Update Submitted" : "Content Item Creation Submitted",
           description: `Content item "${values.title}" processing.`,
         });
-         // Redirect is handled by the server action
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : "An unexpected error occurred.";
@@ -208,39 +244,44 @@ export default function ContentItemForm({ contentId }: ContentItemFormProps) {
   }
   
   useEffect(() => {
-    const currentType = form.getValues("type"); // Get current type from form
+    const currentType = form.getValues("type");
     setSelectedFile(null); 
     setFileInputKey(Date.now()); 
     
     if (!isEditMode || (isEditMode && contentId && availableContentItems.find(c => c.id === contentId)?.type !== currentType)) {
          if (currentType === 'web') {
-            form.setValue('url', form.getValues('url') || 'https://'); // Preserve URL if already web, else set to https://
-         } else if (form.getValues('url').startsWith('blob:')) { // If URL is a blob, it's a temporary preview
-             form.setValue('url', ''); // Clear it as it's not a persisted URL
-         } else if (!isEditMode){
-             form.setValue('url', ''); // Clear URL for new items unless it's web
+             // Ensure URL is preserved or set to https if switching to web type
+            const currentUrlValue = form.getValues('url');
+            if (!currentUrlValue || currentUrlValue.startsWith('blob:')) {
+                 form.setValue('url', 'https://');
+            }
+         } else {
+            // If switching to a file type, and current URL is not a real persisted URL (e.g., it was a web URL or blob)
+            // clear it, or set to persisted if available.
+            const currentUrlValue = form.getValues('url');
+            if (currentUrlValue && (currentUrlValue.startsWith('http') && currentType !== 'web' && !currentUrlValue.startsWith(currentPersistedUrl || '_____')) || currentUrlValue.startsWith('blob:')) {
+                 form.setValue('url', isEditMode && currentPersistedUrl && availableContentItems.find(c=>c.id===contentId)?.type === currentType ? currentPersistedUrl : '');
+            } else if (!isEditMode) {
+                 form.setValue('url', '');
+            }
          }
-         // In edit mode, if type changed, and original URL wasn't a blob, keep it.
-         // The form.reset in loadInitialData handles setting the URL initially.
     }
     
     if (currentType !== 'image') {
       setPreviewUrl(undefined); 
     } else {
-        // If type is image, and there's a URL (either persisted or blob from new selection), show preview
         const currentUrl = form.getValues('url');
-        if (currentUrl) {
+        if (currentUrl && (currentUrl.startsWith('http') || currentUrl.startsWith('/') || currentUrl.startsWith('blob:'))) {
             setPreviewUrl(currentUrl);
-        } else if (isEditMode && contentId) {
-            // Attempt to re-set preview from persisted if type switched back to image
-            const existingItem = availableContentItems.find(c => c.id === contentId);
-            if (existingItem?.type === 'image' && existingItem.url) {
-                setPreviewUrl(existingItem.url);
-                form.setValue('url', existingItem.url);
-            }
+        } else if (isEditMode && contentId && currentPersistedUrl && availableContentItems.find(c=>c.id===contentId)?.type === 'image') {
+            setPreviewUrl(currentPersistedUrl);
+             if (form.getValues('url') !== currentPersistedUrl) form.setValue('url', currentPersistedUrl);
+        } else {
+            setPreviewUrl(undefined);
         }
     }
-  }, [watchedType, isEditMode, contentId, form]); // WatchedType triggers this
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [watchedType, isEditMode, contentId]);
 
   if (isLoadingData && isEditMode) {
     return (
@@ -305,7 +346,7 @@ export default function ContentItemForm({ contentId }: ContentItemFormProps) {
             <FormItem>
               <FormLabel className="font-headline flex items-center">
                 <UploadCloud className="w-4 h-4 mr-2 text-muted-foreground" />
-                Upload File (Optional if URL below is set)
+                Upload File
               </FormLabel>
               <FormControl>
                 <Input 
@@ -322,22 +363,22 @@ export default function ContentItemForm({ contentId }: ContentItemFormProps) {
                 />
               </FormControl>
               <FormDescription className="font-body">
-                Select a file to upload. If you upload a file, its URL will be used. Otherwise, ensure the URL field below is correct.
+                Select a file to upload. This will take precedence over the URL field below if a file is chosen.
                 {isEditMode && currentPersistedUrl && !selectedFile && <span className="block mt-1">Current file/URL: <a href={currentPersistedUrl} target="_blank" rel="noopener noreferrer" className="underline break-all">{currentPersistedUrl.split('/').pop()}</a>. Uploading a new file will replace it.</span>}
               </FormDescription>
-              {selectedFile && <p className="text-sm text-muted-foreground mt-1">New file selected: {selectedFile.name}. This will be uploaded and its URL used upon saving.</p>}
+              {selectedFile && <p className="text-sm text-muted-foreground mt-1">New file selected: {selectedFile.name}. This will be uploaded.</p>}
             </FormItem>
              <FormField
               control={form.control}
               name="url"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel className="font-headline">Content URL (or leave if uploading)</FormLabel>
+                  <FormLabel className="font-headline">Or Provide Direct URL</FormLabel>
                   <FormControl>
                     <Input placeholder="https://example.com/image.jpg or /uploads/file.jpg" {...field} className="font-body" disabled={isProcessing || !!selectedFile}/>
                   </FormControl>
                   <FormDescription className="font-body">
-                    Direct URL to the content. If you upload a file above, this field will be populated automatically on save. If not uploading, ensure this URL is correct.
+                    Direct URL to the content. If you upload a file above, this field will be ignored (or can be left blank).
                   </FormDescription>
                   <FormMessage />
                 </FormItem>
@@ -419,3 +460,4 @@ export default function ContentItemForm({ contentId }: ContentItemFormProps) {
     </Form>
   );
 }
+
