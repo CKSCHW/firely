@@ -1,9 +1,26 @@
+
+"use client";
+
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { useState, type FormEvent } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
-import { Tv, Settings, ListVideo, Zap } from 'lucide-react';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Tv, Settings, Zap } from 'lucide-react';
 
 export default function HomePage() {
+  const router = useRouter();
+  const [displayId, setDisplayId] = useState('');
+
+  const handleLaunchDisplay = (e: FormEvent) => {
+    e.preventDefault();
+    if (displayId.trim()) {
+      router.push(`/display/${displayId.trim()}`);
+    }
+  };
+
   return (
     <div className="flex flex-col items-center justify-center min-h-screen bg-gradient-to-br from-background to-secondary p-4 sm:p-8 selection:bg-accent selection:text-accent-foreground">
       <header className="mb-10 text-center">
@@ -44,32 +61,44 @@ export default function HomePage() {
         </Card>
 
         <Card className="shadow-lg hover:shadow-xl transition-all duration-300 ease-in-out transform hover:-translate-y-1">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-3 font-headline text-2xl text-primary">
-              <Tv className="w-7 h-7 text-accent" />
-              Sample Display
-            </CardTitle>
-            <CardDescription className="font-body text-base">
-              Experience the Firefly Signage client. See your content come to life.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-             <p className="font-body text-sm text-muted-foreground mb-4">
-              Launch a sample display to preview the playback experience.
-            </p>
-          </CardContent>
-          <CardFooter>
-            <Link href="/display/sample-display-1" asChild>
-              <Button className="w-full font-headline text-lg py-6" variant="outline">
+          <form onSubmit={handleLaunchDisplay}>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-3 font-headline text-2xl text-primary">
+                <Tv className="w-7 h-7 text-accent" />
                 Launch Display
+              </CardTitle>
+              <CardDescription className="font-body text-base">
+                Enter a Display ID to launch its content client. (e.g., sample-display-1)
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Label htmlFor="displayIdInput" className="font-body text-sm text-muted-foreground mb-2 block">
+                Display ID:
+              </Label>
+              <Input
+                id="displayIdInput"
+                type="text"
+                value={displayId}
+                onChange={(e) => setDisplayId(e.target.value)}
+                placeholder="Enter Display ID (e.g., sample-display-1)"
+                className="font-body"
+                required
+              />
+            </CardContent>
+            <CardFooter>
+              <Button type="submit" className="w-full font-headline text-lg py-6" variant="outline" disabled={!displayId.trim()}>
+                Launch Display Client
               </Button>
-            </Link>
-          </CardFooter>
+            </CardFooter>
+          </form>
         </Card>
       </div>
 
       <footer className="mt-16 text-center text-muted-foreground font-body text-sm">
         <p>&copy; {new Date().getFullYear()} Firefly Signage. Ignite Your Screens.</p>
+        <p className="text-xs mt-1">
+          Note: Device online/offline status in this prototype is based on mock data and not real-time.
+        </p>
       </footer>
     </div>
   );

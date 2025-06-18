@@ -11,6 +11,7 @@ import { Button } from '@/components/ui/button';
 
 function timeToMinutes(timeStr: string): number { // HH:MM
   const [hours, minutes] = timeStr.split(':').map(Number);
+  if (isNaN(hours) || isNaN(minutes)) return 0; // Handle invalid time format
   return hours * 60 + minutes;
 }
 
@@ -18,7 +19,10 @@ async function getActivePlaylistForDisplay(displayId: string): Promise<Playlist 
   await ensureDataLoaded(); 
   
   const device = mockDevices.find(d => d.id === displayId);
-  if (!device) return null;
+  if (!device) {
+    console.error(`[Display ${displayId}] Device configuration not found.`);
+    return null;
+  }
 
   let activePlaylistId: string | undefined = device.currentPlaylistId; // Start with fallback
 
@@ -27,25 +31,44 @@ async function getActivePlaylistForDisplay(displayId: string): Promise<Playlist 
     const currentDay = now.getDay(); // 0 (Sunday) - 6 (Saturday)
     const currentTimeInMinutes = now.getHours() * 60 + now.getMinutes();
 
-    for (const entry of device.schedule) {
+    // Sort schedule entries by start time to ensure correct precedence if overlaps occur (though ideally overlaps should be managed)
+    const sortedSchedule = [...device.schedule].sort((a, b) => timeToMinutes(a.startTime) - timeToMinutes(b.startTime));
+
+    for (const entry of sortedSchedule) {
       if (entry.daysOfWeek.includes(currentDay)) {
         const startTimeInMinutes = timeToMinutes(entry.startTime);
         const endTimeInMinutes = timeToMinutes(entry.endTime);
+        // Ensure end time is after start time, potentially spanning midnight if needed (not handled here)
+        if (endTimeInMinutes < startTimeInMinutes) { // Simple case: assumes same day, error in schedule
+             console.warn(`[Display ${displayId}] Schedule entry ${entry.id} for playlist ${entry.playlistId} has end time before start time. Skipping.`);
+             continue;
+        }
         if (currentTimeInMinutes >= startTimeInMinutes && currentTimeInMinutes <= endTimeInMinutes) {
           activePlaylistId = entry.playlistId;
-          break; // Found an active scheduled playlist
+          console.log(`[Display ${displayId}] Active schedule found: Playlist ${activePlaylistId} for entry ${entry.id}`);
+          break; 
         }
       }
     }
   }
   
-  if (!activePlaylistId) return null; // No fallback and no active schedule
+  if (!activePlaylistId) {
+    console.log(`[Display ${displayId}] No active schedule or fallback playlist ID found.`);
+    return null;
+  }
+  console.log(`[Display ${displayId}] Determined active playlist ID: ${activePlaylistId}`);
 
   const playlistFromMock = mockPlaylists.find(p => p.id === activePlaylistId);
-  if (!playlistFromMock) return null;
+  if (!playlistFromMock) {
+    console.error(`[Display ${displayId}] Playlist with ID ${activePlaylistId} not found in mockPlaylists.`);
+    return null;
+  }
 
   const populatedItems = playlistFromMock.items.map(itemRefOrItem => {
     const fullItem = availableContentItems.find(ci => ci.id === (typeof itemRefOrItem === 'string' ? itemRefOrItem : itemRefOrItem.id));
+    if (!fullItem) {
+      console.warn(`[Display ${displayId}] Content item with ID ${(typeof itemRefOrItem === 'string' ? itemRefOrItem : itemRefOrItem.id)} not found for playlist ${activePlaylistId}.`);
+    }
     return fullItem;
   }).filter(Boolean) as ContentItem[];
 
@@ -65,24 +88,29 @@ export default function DisplayPage({ params }: { params: { displayId: string } 
   const fetchAndSetPlaylist = useCallback(async () => {
     setLoading(true);
     setError(null);
-    setContentError(null);
+    setContentError(null); // Reset content error on playlist fetch
+    console.log(`[Display ${params.displayId}] Initiating playlist fetch...`);
     try {
       const data = await getActivePlaylistForDisplay(params.displayId);
       if (data && data.items.length > 0) {
         setPlaylist(data);
         setCurrentItemIndex(0); 
+        console.log(`[Display ${params.displayId}] Playlist "${data.name}" loaded with ${data.items.length} items.`);
       } else if (data && data.items.length === 0) {
-        setError("Active playlist is empty. Please add content or check schedule.");
+        setError(`Active playlist "${data.name}" is empty. Please add content or check schedule.`);
+        console.warn(`[Display ${params.displayId}] Active playlist "${data.name}" is empty.`);
       } else {
         const deviceExists = mockDevices.some(d => d.id === params.displayId);
         if (!deviceExists) {
-          setError("Display ID not found. Cannot load playlist.");
+          setError(`Display ID "${params.displayId}" not found. Cannot load playlist.`);
+          console.error(`[Display ${params.displayId}] Display ID configuration not found.`);
         } else {
-           setError("No active playlist found. Check device schedule and fallback configuration.");
+           setError("No active playlist found for this display. Check device schedule and fallback configuration.");
+           console.warn(`[Display ${params.displayId}] No active playlist could be determined.`);
         }
       }
     } catch (e) {
-      console.error("Error fetching playlist data:", e);
+      console.error(`[Display ${params.displayId}] Error fetching playlist data:`, e);
       setError("Failed to load playlist. Check network or configuration.");
     } finally {
       setLoading(false);
@@ -93,40 +121,50 @@ export default function DisplayPage({ params }: { params: { displayId: string } 
   useEffect(() => {
     fetchAndSetPlaylist();
     // Set up an interval to re-check the active playlist periodically (e.g., every minute)
-    // This ensures the display updates if a new schedule entry becomes active
     const scheduleCheckInterval = setInterval(fetchAndSetPlaylist, 60 * 1000); 
-    return () => clearInterval(scheduleCheckInterval);
-  }, [fetchAndSetPlaylist]);
+    console.log(`[Display ${params.displayId}] Display client initialized. Checking for active playlist every 60s.`);
+    return () => {
+      clearInterval(scheduleCheckInterval);
+      console.log(`[Display ${params.displayId}] Display client cleanup. Stopped schedule check interval.`);
+    };
+  }, [fetchAndSetPlaylist, params.displayId]);
 
   const advanceToNextItem = useCallback(() => {
     if (!playlist || playlist.items.length === 0) return;
     setCurrentItemIndex((prevIndex) => (prevIndex + 1) % playlist.items.length);
-    setContentError(null); 
-  }, [playlist]);
+    setContentError(null); // Reset content error when advancing
+    console.log(`[Display ${params.displayId}] Advancing to next item. Index: ${(currentItemIndex + 1) % playlist.items.length}`);
+  }, [playlist, currentItemIndex, params.displayId]);
 
   useEffect(() => {
     if (!playlist || playlist.items.length === 0 || isPaused || loading || error || contentError) return;
 
     const currentItem = playlist.items[currentItemIndex];
     const duration = (currentItem.duration || 10) * 1000;
+    console.log(`[Display ${params.displayId}] Displaying item "${currentItem.title || currentItem.id}" for ${duration / 1000}s.`);
 
     const timer = setTimeout(() => {
       advanceToNextItem();
     }, duration);
 
-    return () => clearTimeout(timer);
-  }, [currentItemIndex, playlist, isPaused, loading, error, contentError, advanceToNextItem]);
+    return () => {
+      clearTimeout(timer);
+      console.log(`[Display ${params.displayId}] Cleared timer for item "${currentItem.title || currentItem.id}".`);
+    };
+  }, [currentItemIndex, playlist, isPaused, loading, error, contentError, advanceToNextItem, params.displayId]);
 
   const navigate = (direction: 'next' | 'prev') => {
     if (!playlist || playlist.items.length === 0) return;
     setIsPaused(true); 
-    setContentError(null);
+    setContentError(null); // Reset content error on manual navigation
     setCurrentItemIndex(prevIndex => {
       const newIndex = direction === 'next' 
         ? (prevIndex + 1) % playlist.items.length
         : (prevIndex - 1 + playlist.items.length) % playlist.items.length;
+      console.log(`[Display ${params.displayId}] Manual navigation to item index: ${newIndex}. Paused for 5s.`);
       return newIndex;
     });
+    // Resume after a short delay to prevent rapid skipping
     setTimeout(() => setIsPaused(false), 5000); 
   };
   
@@ -134,7 +172,7 @@ export default function DisplayPage({ params }: { params: { displayId: string } 
     return (
       <div className="fixed inset-0 bg-gray-900 flex flex-col items-center justify-center text-slate-200">
         <Loader2 className="w-20 h-20 animate-spin text-accent mb-6" />
-        <p className="mt-4 text-3xl font-headline tracking-wide">Loading Display Content...</p>
+        <p className="mt-4 text-3xl font-headline tracking-wide">Loading Display Content for {params.displayId}...</p>
         <p className="font-body text-slate-400 text-lg">Firefly Signage</p>
       </div>
     );
@@ -145,7 +183,7 @@ export default function DisplayPage({ params }: { params: { displayId: string } 
       <div className="fixed inset-0 bg-red-900 flex flex-col items-center justify-center text-red-100 p-8 text-center">
         <AlertTriangle className="w-24 h-24 text-red-300 mb-6" />
         <p className="mt-4 text-4xl font-headline">{error}</p>
-        <p className="font-body mt-3 text-lg text-red-200">Please check the display configuration in the admin panel or contact support.</p>
+        <p className="font-body mt-3 text-lg text-red-200">Display ID: {params.displayId}. Please check the display configuration in the admin panel or contact support.</p>
         <Button onClick={fetchAndSetPlaylist} variant="outline" className="mt-8 text-red-100 border-red-300 hover:bg-red-800 hover:text-red-50">
           Retry Loading
         </Button>
@@ -159,7 +197,7 @@ export default function DisplayPage({ params }: { params: { displayId: string } 
       <div className="fixed inset-0 bg-gray-800 flex flex-col items-center justify-center text-slate-300 p-8 text-center">
         <EyeOff className="w-24 h-24 text-slate-500 mb-6" />
         <p className="mt-4 text-3xl font-headline">No Content to Display</p>
-        <p className="font-body text-slate-400 mt-2 text-lg">No playlist is currently scheduled or the active playlist is empty.</p>
+        <p className="font-body text-slate-400 mt-2 text-lg">Display ID: {params.displayId}. No playlist is currently scheduled or the active playlist is empty.</p>
         <Button onClick={fetchAndSetPlaylist} variant="outline" className="mt-8 text-slate-300 border-slate-500 hover:bg-gray-700 hover:text-slate-100">
           Retry Loading
         </Button>
@@ -170,14 +208,21 @@ export default function DisplayPage({ params }: { params: { displayId: string } 
 
   const currentItem = playlist.items[currentItemIndex];
 
+  const handleContentError = (item: ContentItem, type: string) => {
+     const errorMessage = `Failed to load ${type} content: "${item.title || 'Untitled'}" from ${item.url}`;
+     console.error(`[Display ${params.displayId}] ${errorMessage}`);
+     setContentError(errorMessage);
+     // The main useEffect will handle advancing to the next item after the current item's duration.
+  };
+
   const renderContentItem = (item: ContentItem) => {
-    if (contentError) {
+    if (contentError && playlist.items[currentItemIndex]?.id === item.id) { // Show error only for current item
       return (
-        <div className="w-full h-full flex flex-col items-center justify-center bg-black text-yellow-400 p-4">
+        <div className="w-full h-full flex flex-col items-center justify-center bg-black text-yellow-400 p-4 text-center">
           <FileWarning className="w-16 h-16 mb-4" />
           <p className="text-xl font-semibold">Content Error</p>
-          <p>{contentError}</p>
-          <p className="text-sm mt-2">Skipping to next item in {item.duration || 10}s...</p>
+          <p className="text-md max-w-xl break-words">{contentError}</p>
+          <p className="text-sm mt-2">Will attempt next item in {item.duration || 10}s...</p>
         </div>
       );
     }
@@ -192,25 +237,26 @@ export default function DisplayPage({ params }: { params: { displayId: string } 
             fill={true}
             style={{ objectFit: "contain" }}
             quality={90}
-            priority
+            priority // Prioritize loading the current image
             className="animate-fadeIn"
             data-ai-hint={item.dataAiHint || "signage image"}
             unoptimized={item.url.startsWith("https://placehold.co") || item.url.startsWith('blob:') || item.url.startsWith('/uploads/')}
-            onError={() => setContentError(`Failed to load image: ${item.title || 'Untitled'}`)}
+            onError={() => handleContentError(item, 'image')}
           />
-        ) : <div className="w-full h-full flex items-center justify-center bg-gray-700 text-white"><FileWarning className="w-12 h-12 mr-2"/>Image URL missing</div>;
+        ) : <div className="w-full h-full flex items-center justify-center bg-gray-700 text-white"><FileWarning className="w-12 h-12 mr-2"/>Image URL missing for "{item.title || item.id}"</div>;
       case 'video':
         return item.url ? (
           <video
             key={item.id}
             src={item.url}
             autoPlay
-            muted
-            loop 
+            muted // Autoplay usually requires muted
+            loop // Videos in signage often loop within their slot
             className="w-full h-full object-contain animate-fadeIn"
-            onError={() => setContentError(`Failed to load video: ${item.title || 'Untitled'}`)}
+            onError={() => handleContentError(item, 'video')}
+            onCanPlay={() => setContentError(null)} // Clear error if it starts playing
           />
-        ) : <div className="w-full h-full flex items-center justify-center bg-gray-700 text-white"><FileWarning className="w-12 h-12 mr-2"/>Video URL missing</div>;
+        ) : <div className="w-full h-full flex items-center justify-center bg-gray-700 text-white"><FileWarning className="w-12 h-12 mr-2"/>Video URL missing for "{item.title || item.id}"</div>;
       case 'web':
       case 'pdf': 
         return item.url ? (
@@ -219,46 +265,57 @@ export default function DisplayPage({ params }: { params: { displayId: string } 
             src={item.url}
             title={item.title || `Display Content ${currentItemIndex + 1}`}
             className="w-full h-full border-0 animate-fadeIn"
-            sandbox="allow-scripts allow-same-origin allow-popups" 
-            onError={() => setContentError(`Failed to load ${item.type} content: ${item.title || 'Untitled'}`)}
+            sandbox="allow-scripts allow-same-origin allow-popups" // Common sandbox attributes for security
+            onError={() => handleContentError(item, item.type)}
+            onLoad={() => setContentError(null)} // Clear error if iframe loads
           />
-        ) : <div className="w-full h-full flex items-center justify-center bg-gray-700 text-white"><FileWarning className="w-12 h-12 mr-2"/>{item.type} URL missing</div>;
+        ) : <div className="w-full h-full flex items-center justify-center bg-gray-700 text-white"><FileWarning className="w-12 h-12 mr-2"/>{item.type.toUpperCase()} URL missing for "{item.title || item.id}"</div>;
       default:
+         console.warn(`[Display ${params.displayId}] Unsupported content type: ${item.type} for item "${item.title || item.id}"`);
         return (
-          <div className="w-full h-full flex flex-col items-center justify-center bg-gray-700 text-yellow-300 p-4">
+          <div className="w-full h-full flex flex-col items-center justify-center bg-gray-700 text-yellow-300 p-4 text-center">
             <Tv2 className="w-16 h-16 mb-4" />
-            <p className="text-xl">Unsupported content type: {item.type}</p>
+            <p className="text-xl">Unsupported content type: {(item as any).type}</p>
+            <p>Item: "{item.title || item.id}"</p>
           </div>
         );
     }
   };
 
   return (
-    <div className="fixed inset-0 bg-black flex items-center justify-center overflow-hidden select-none group" role="main" aria-label="Digital Signage Display">
+    <div className="fixed inset-0 bg-black flex items-center justify-center overflow-hidden select-none group" role="main" aria-label={`Digital Signage Display ${params.displayId}`}>
       {renderContentItem(currentItem)}
       
+      {/* Navigation Controls - visible on hover/focus */}
       <button 
         onClick={() => navigate('prev')} 
         aria-label="Previous Item"
-        className="absolute left-2 md:left-4 top-1/2 -translate-y-1/2 z-10 p-2 bg-black/20 text-white/70 rounded-full hover:bg-black/40 hover:text-white transition-all focus:outline-none focus:ring-2 focus:ring-accent focus:ring-opacity-50 opacity-0 group-hover:opacity-100 focus:opacity-100"
+        className="absolute left-2 md:left-4 top-1/2 -translate-y-1/2 z-10 p-2 bg-black/30 text-white/80 rounded-full hover:bg-black/50 hover:text-white transition-all focus:outline-none focus:ring-2 focus:ring-accent focus:ring-opacity-70 opacity-0 group-hover:opacity-100 focus:opacity-100"
       >
-        <ArrowLeftCircle size={28} />
+        <ArrowLeftCircle size={32} />
       </button>
       <button 
         onClick={() => navigate('next')}
         aria-label="Next Item"
-        className="absolute right-2 md:right-4 top-1/2 -translate-y-1/2 z-10 p-2 bg-black/20 text-white/70 rounded-full hover:bg-black/40 hover:text-white transition-all focus:outline-none focus:ring-2 focus:ring-accent focus:ring-opacity-50 opacity-0 group-hover:opacity-100 focus:opacity-100"
+        className="absolute right-2 md:right-4 top-1/2 -translate-y-1/2 z-10 p-2 bg-black/30 text-white/80 rounded-full hover:bg-black/50 hover:text-white transition-all focus:outline-none focus:ring-2 focus:ring-accent focus:ring-opacity-70 opacity-0 group-hover:opacity-100 focus:opacity-100"
       >
-        <ArrowRightCircle size={28} />
+        <ArrowRightCircle size={32} />
       </button>
 
-      {currentItem.title && !contentError && (
-        <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/70 via-black/40 to-transparent text-white p-4 md:p-6 z-10 pointer-events-none">
+      {/* Content Title Overlay - only if title exists and no content error for current item */}
+      {currentItem.title && !(contentError && playlist.items[currentItemIndex]?.id === currentItem.id) && (
+        <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/60 via-black/30 to-transparent text-white p-4 md:p-6 z-10 pointer-events-none">
           <p className="text-lg md:text-xl font-headline drop-shadow-md">{currentItem.title}</p>
         </div>
       )}
       
-      <div className="absolute top-0 left-0 h-1.5 bg-accent/70 z-20" style={{ width: `${((currentItemIndex + 1) / playlist.items.length) * 100}%`, transition: 'width 0.5s ease-in-out' }}></div>
+      {/* Playlist Progress Bar */}
+      <div className="absolute top-0 left-0 h-1 bg-accent/80 z-20" style={{ width: `${((currentItemIndex + 1) / playlist.items.length) * 100}%`, transition: 'width 0.3s ease-out' }}></div>
+       {/* Display ID subtle overlay */}
+       <div className="absolute top-2 right-3 text-xs text-white/40 font-mono z-20 pointer-events-none">
+        ID: {params.displayId}
+      </div>
     </div>
   );
 }
+
