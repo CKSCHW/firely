@@ -23,7 +23,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import type { ContentItem } from '@/lib/types';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 
 const TypeIcon = ({ type }: { type: ContentItem['type'] }) => {
   switch (type) {
@@ -59,7 +59,7 @@ export default function ContentLibraryPage() {
     loadData();
   }, []);
 
-  const handleDelete = async (itemId: string, itemTitle?: string) => {
+  const handleDelete = useCallback(async (itemId: string, itemTitle?: string) => {
     setIsDeleting(true);
     try {
       const success = await deleteMockContentItem(itemId);
@@ -87,7 +87,7 @@ export default function ContentLibraryPage() {
     } finally {
       setIsDeleting(false);
     }
-  };
+  }, [toast, router, setContentItems]);
   
   if (isLoading) {
     return (
@@ -152,8 +152,8 @@ export default function ContentLibraryPage() {
                            <Image 
                              src={item.url} 
                              alt={item.title || 'Content preview'} 
-                             layout="fill" 
-                             objectFit="cover" 
+                             fill={true}
+                             style={{ objectFit: "cover" }}
                              data-ai-hint={item.dataAiHint || 'thumbnail'} 
                              unoptimized={item.url.startsWith("https://placehold.co") || item.url.startsWith('blob:') || item.url.startsWith('/uploads/')}
                              onError={(e) => { e.currentTarget.src = "https://placehold.co/64x40/CCCCCC/FFFFFF?text=Error";}}

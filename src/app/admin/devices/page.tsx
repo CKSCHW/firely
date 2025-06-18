@@ -8,7 +8,7 @@ import { MonitorSmartphone, Wifi, WifiOff, Clock, Edit, Trash2, PlusCircle, Load
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
 import { formatDistanceToNow } from 'date-fns';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import type { DisplayDevice } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import { useRouter } from 'next/navigation';
@@ -36,14 +36,12 @@ export default function DevicesPage() {
       setIsLoading(true);
       await ensureDataLoaded();
       setDevices([...mockDevices]);
-      // ensure mockPlaylists is also loaded if not done globally
-      // await ensureDataLoaded(); // or a specific playlist load if separated
       setIsLoading(false);
     }
     loadData();
   }, []);
 
-  const handleDeleteDevice = async (deviceId: string, deviceName?: string) => {
+  const handleDeleteDevice = useCallback(async (deviceId: string, deviceName?: string) => {
     setIsDeleting(true);
     try {
       const success = await deleteMockDevice(deviceId);
@@ -70,7 +68,7 @@ export default function DevicesPage() {
     } finally {
       setIsDeleting(false);
     }
-  };
+  }, [toast, router, setDevices]);
 
   if (isLoading) {
     return (

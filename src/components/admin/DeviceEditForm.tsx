@@ -22,7 +22,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { useToast } from "@/hooks/use-toast";
 import { updateMockDevice, mockDevices, mockPlaylists, ensureDataLoaded } from "@/data/mockData";
 import type { DisplayDevice, Playlist, ScheduleEntry } from "@/lib/types";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { Loader2, Trash2, PlusCircle, CalendarClock } from "lucide-react";
 import { v4 as uuidv4 } from 'uuid';
 
@@ -54,7 +54,6 @@ export default function DeviceEditForm({ deviceId }: DeviceEditFormProps) {
   const [availablePlaylists, setAvailablePlaylists] = useState<Playlist[]>([]);
   const [currentSchedule, setCurrentSchedule] = useState<ScheduleEntry[]>([]);
 
-  // States for the "Add Schedule Entry" form
   const [newSchedulePlaylistId, setNewSchedulePlaylistId] = useState<string>("");
   const [newScheduleStartTime, setNewScheduleStartTime] = useState<string>("");
   const [newScheduleEndTime, setNewScheduleEndTime] = useState<string>("");
@@ -98,7 +97,7 @@ export default function DeviceEditForm({ deviceId }: DeviceEditFormProps) {
     }
   }, [deviceId, form, router, toast]);
 
-  const handleAddScheduleEntry = () => {
+  const handleAddScheduleEntry = useCallback(() => {
     if (!newSchedulePlaylistId || !newScheduleStartTime || !newScheduleEndTime || newScheduleDays.length === 0) {
       toast({ title: "Missing Information", description: "Please fill all fields for the schedule entry.", variant: "destructive" });
       return;
@@ -116,22 +115,21 @@ export default function DeviceEditForm({ deviceId }: DeviceEditFormProps) {
       daysOfWeek: [...newScheduleDays].sort((a,b) => a-b),
     };
     setCurrentSchedule(prev => [...prev, newEntry]);
-    // Reset new schedule form fields
     setNewSchedulePlaylistId("");
     setNewScheduleStartTime("");
     setNewScheduleEndTime("");
     setNewScheduleDays([]);
-  };
+  }, [newSchedulePlaylistId, newScheduleStartTime, newScheduleEndTime, newScheduleDays, toast, setCurrentSchedule, setNewSchedulePlaylistId, setNewScheduleStartTime, setNewScheduleEndTime, setNewScheduleDays]);
 
-  const handleRemoveScheduleEntry = (entryId: string) => {
+  const handleRemoveScheduleEntry = useCallback((entryId: string) => {
     setCurrentSchedule(prev => prev.filter(entry => entry.id !== entryId));
-  };
+  }, [setCurrentSchedule]);
 
-  const handleDayToggle = (dayId: number) => {
+  const handleDayToggle = useCallback((dayId: number) => {
     setNewScheduleDays(prev => 
       prev.includes(dayId) ? prev.filter(d => d !== dayId) : [...prev, dayId]
     );
-  };
+  }, [setNewScheduleDays]);
 
   async function onSubmit(values: DeviceFormValues) {
     setIsSubmitting(true);
@@ -139,7 +137,7 @@ export default function DeviceEditForm({ deviceId }: DeviceEditFormProps) {
       const result = await updateMockDevice(deviceId, {
         name: values.deviceName,
         currentPlaylistId: values.currentPlaylistId || undefined, 
-        schedule: currentSchedule, // Include the schedule
+        schedule: currentSchedule, 
       });
 
       if (result) {
@@ -239,7 +237,6 @@ export default function DeviceEditForm({ deviceId }: DeviceEditFormProps) {
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
-            {/* Display existing schedule entries */}
             {currentSchedule.length > 0 ? (
               <ul className="space-y-3">
                 {currentSchedule.map(entry => {
@@ -265,7 +262,6 @@ export default function DeviceEditForm({ deviceId }: DeviceEditFormProps) {
               <p className="text-sm text-muted-foreground text-center py-4">No schedule entries defined. Add one below.</p>
             )}
 
-            {/* Form to add new schedule entry */}
             <div className="border-t pt-6 space-y-4">
               <h4 className="font-semibold font-headline text-md">Add New Schedule Entry</h4>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
