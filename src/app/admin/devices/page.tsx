@@ -1,6 +1,6 @@
 
 "use client";
-import { mockDevices, ensureDataLoaded } from '@/data/mockData';
+import { mockDevices, ensureDataLoaded, mockPlaylists } from '@/data/mockData';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
@@ -42,7 +42,7 @@ export default function DevicesPage() {
             Monitor and manage your connected display devices.
           </p>
         </div>
-        <Link href="/admin/devices/register" passHref legacyBehavior>
+        <Link href="/admin/devices/register" asChild>
           <Button variant="default" className="font-headline">
               <PlusCircle className="mr-2 h-5 w-5" />
               Register New Device

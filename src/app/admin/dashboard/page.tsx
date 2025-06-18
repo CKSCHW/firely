@@ -79,17 +79,17 @@ export default function DashboardPage() {
           <CardTitle className="font-headline text-2xl">Quick Actions</CardTitle>
         </CardHeader>
         <CardContent className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
-          <Link href="/admin/playlists/create" passHref legacyBehavior>
+          <Link href="/admin/playlists/create" asChild>
             <Button variant="default" className="w-full py-6 text-base font-headline">
               Create New Playlist
             </Button>
           </Link>
-          <Link href="/admin/content/create" passHref legacyBehavior>
+          <Link href="/admin/content/create" asChild>
             <Button variant="default" className="w-full py-6 text-base font-headline">
               Add New Content
             </Button>
           </Link>
-           <Link href="/admin/devices/register" passHref legacyBehavior>
+           <Link href="/admin/devices/register" asChild>
             <Button variant="default" className="w-full py-6 text-base font-headline">
               Register New Device
             </Button>

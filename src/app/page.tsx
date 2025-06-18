@@ -35,7 +35,7 @@ export default function HomePage() {
             </p>
           </CardContent>
           <CardFooter>
-            <Link href="/admin/dashboard" passHref legacyBehavior>
+            <Link href="/admin/dashboard" asChild>
               <Button className="w-full font-headline text-lg py-6" variant="default">
                 Go to Admin
               </Button>
@@ -59,7 +59,7 @@ export default function HomePage() {
             </p>
           </CardContent>
           <CardFooter>
-            <Link href="/display/sample-display-1" passHref legacyBehavior>
+            <Link href="/display/sample-display-1" asChild>
               <Button className="w-full font-headline text-lg py-6" variant="outline">
                 Launch Display
               </Button>

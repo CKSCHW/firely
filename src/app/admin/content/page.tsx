@@ -108,7 +108,7 @@ export default function ContentLibraryPage() {
             Manage your individual content assets like images, videos, and web links.
           </p>
         </div>
-        <Link href="/admin/content/create" passHref legacyBehavior>
+        <Link href="/admin/content/create" asChild>
           <Button variant="default" className="font-headline">
             <PlusCircle className="mr-2 h-5 w-5" />
             Add New Content

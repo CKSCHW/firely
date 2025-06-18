@@ -53,7 +53,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           <SidebarMenu className="px-2 py-4">
             {navItems.map((item) => (
               <SidebarMenuItem key={item.label}>
-                <Link href={item.href} passHref legacyBehavior>
+                <Link href={item.href} asChild>
                   <SidebarMenuButton
                     variant="default"
                     size="default"
@@ -76,7 +76,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           <SidebarMenu className="px-2 py-4 mt-auto border-t border-sidebar-border">
              {secondaryNavItems.map((item) => (
               <SidebarMenuItem key={item.label}>
-                <Link href={item.href} passHref legacyBehavior>
+                <Link href={item.href} asChild>
                   <SidebarMenuButton
                     variant="ghost"
                     size="default"

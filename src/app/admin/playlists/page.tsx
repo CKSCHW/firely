@@ -46,7 +46,7 @@ export default function PlaylistsPage() {
             Create, edit, and manage your content playlists.
           </p>
         </div>
-        <Link href="/admin/playlists/create" passHref legacyBehavior>
+        <Link href="/admin/playlists/create" asChild>
           <Button variant="default" className="font-headline">
             <PlusCircle className="mr-2 h-5 w-5" />
             Create New Playlist
@@ -64,7 +64,7 @@ export default function PlaylistsPage() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <Link href="/admin/playlists/create" passHref legacyBehavior>
+            <Link href="/admin/playlists/create" asChild>
               <Button variant="default" size="lg" className="font-headline">
                 Create Playlist
               </Button>
