@@ -544,22 +544,23 @@ const SidebarMenuButton = React.forwardRef<
 >(
   (
     {
-      asChild: propAsChild = false, // Renamed to avoid conflict if 'asChild' is in restProps
+      asChild: propAsChild = false,
       isActive = false,
       variant = "default",
       size = "default",
       tooltip,
       className,
-      children, // Explicitly include children
-      ...restProps // Contains all other props passed to SidebarMenuButton
+      children,
+      ...restProps
     },
     ref
   ) => {
     const Comp = propAsChild ? Slot : "button"
     const { isMobile, state } = useSidebar()
 
-    // Filter out 'asChild' from restProps before spreading onto Comp
-    const { asChild: _forwardedAsChild, ...finalProps } = restProps
+    // Explicitly remove `asChild` from `restProps` if it exists,
+    // to prevent it from being passed to the underlying DOM element or Slot.
+    const { asChild: _ignoredAsChild, ...finalProps } = restProps
 
     const buttonElement = (
       <Comp
