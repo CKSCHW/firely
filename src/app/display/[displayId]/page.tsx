@@ -8,6 +8,7 @@ import { mockPlaylists, mockDevices, availableContentItems, ensureDataLoaded } f
 import { ArrowLeftCircle, ArrowRightCircle, Loader2, AlertTriangle, EyeOff, Tv2, FileWarning, Maximize, Minimize } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { updateDeviceHeartbeatAction } from '@/app/admin/devices/actions';
+import { useParams } from 'next/navigation';
 
 
 function timeToMinutes(timeStr: string): number { // HH:MM
@@ -77,7 +78,10 @@ async function getActivePlaylistForDisplay(displayId: string): Promise<Playlist 
 }
 
 
-export default function DisplayPage({ params }: { params: { displayId: string } }) {
+export default function DisplayPage() {
+  const params = useParams<{ displayId: string }>();
+  const displayId = params.displayId;
+
   const [playlist, setPlaylist] = useState<Playlist | null>(null);
   const [currentItemIndex, setCurrentItemIndex] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -85,7 +89,7 @@ export default function DisplayPage({ params }: { params: { displayId: string } 
   const [isPaused, setIsPaused] = useState(false); 
   const [contentError, setContentError] = useState<string | null>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
-  const displayId = params.displayId;
+  
 
   const sendHeartbeat = useCallback(async () => {
     if (!displayId) return;
@@ -99,6 +103,8 @@ export default function DisplayPage({ params }: { params: { displayId: string } 
   }, [displayId]);
 
   useEffect(() => {
+    if (!displayId) return; // Don't run effects if displayId is not yet available
+
     sendHeartbeat(); // Initial heartbeat on load
     const heartbeatInterval = setInterval(sendHeartbeat, 60 * 1000); // Send heartbeat every 60 seconds
 
@@ -160,6 +166,10 @@ export default function DisplayPage({ params }: { params: { displayId: string } 
 
 
   const fetchAndSetPlaylist = useCallback(async () => {
+    if (!displayId) {
+      setLoading(false); // Ensure loading stops if displayId isn't ready
+      return;
+    }
     setLoading(true);
     setError(null);
     setContentError(null); 
@@ -193,6 +203,7 @@ export default function DisplayPage({ params }: { params: { displayId: string } 
 
 
   useEffect(() => {
+    if (!displayId) return; // Don't run if displayId is not available
     fetchAndSetPlaylist();
     const scheduleCheckInterval = setInterval(fetchAndSetPlaylist, 60 * 1000 * 5); // Re-check playlist based on schedule every 5 mins
     console.log(`[Display ${displayId}] Display client initialized. Checking for active playlist based on schedule every 5m.`);
@@ -222,7 +233,9 @@ export default function DisplayPage({ params }: { params: { displayId: string } 
 
     return () => {
       clearTimeout(timer);
-      console.log(`[Display ${displayId}] Cleared timer for item "${currentItem.title || currentItem.id}".`);
+      if (currentItem) { // Add a check for currentItem
+        console.log(`[Display ${displayId}] Cleared timer for item "${currentItem.title || currentItem.id}".`);
+      }
     };
   }, [currentItemIndex, playlist, isPaused, loading, error, contentError, advanceToNextItem, displayId]);
 
@@ -240,11 +253,11 @@ export default function DisplayPage({ params }: { params: { displayId: string } 
     setTimeout(() => setIsPaused(false), 5000); 
   };
   
-  if (loading) {
+  if (loading || !displayId) { // Also check if displayId is available before rendering main content
     return (
       <div className="fixed inset-0 bg-gray-900 flex flex-col items-center justify-center text-slate-200">
         <Loader2 className="w-20 h-20 animate-spin text-accent mb-6" />
-        <p className="mt-4 text-3xl font-headline tracking-wide">Loading Display Content for {displayId}...</p>
+        <p className="mt-4 text-3xl font-headline tracking-wide">Loading Display Content for {displayId || '...'} </p>
         <p className="font-body text-slate-400 text-lg">Firefly Signage</p>
       </div>
     );
@@ -279,6 +292,14 @@ export default function DisplayPage({ params }: { params: { displayId: string } 
   }
 
   const currentItem = playlist.items[currentItemIndex];
+   if (!currentItem) { // Add a guard clause for currentItem
+    return (
+      <div className="fixed inset-0 bg-gray-700 flex flex-col items-center justify-center text-yellow-300 p-4 text-center">
+        <Loader2 className="w-16 h-16 mb-4 animate-spin" />
+        <p className="text-xl">Loading item data...</p>
+      </div>
+    );
+  }
 
   const handleContentError = (item: ContentItem, type: string) => {
      const errorMessage = `Failed to load ${type} content: "${item.title || 'Untitled'}" from ${item.url}`;
@@ -336,7 +357,7 @@ export default function DisplayPage({ params }: { params: { displayId: string } 
             src={item.url}
             title={item.title || `Display Content ${currentItemIndex + 1}`}
             className="w-full h-full border-0 animate-fadeIn"
-            sandbox="allow-scripts allow-same-origin allow-popups" 
+            sandbox="allow-scripts allow-same-origin allow-popups allow-downloads" 
             onError={() => handleContentError(item, item.type)}
             onLoad={() => setContentError(null)} 
           />
@@ -394,3 +415,4 @@ export default function DisplayPage({ params }: { params: { displayId: string } 
   );
 }
 
+    
