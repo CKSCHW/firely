@@ -16,9 +16,9 @@ let db: Firestore;
 
 // Check if all necessary Firebase config keys are present
 const isFirebaseConfigured = 
-  firebaseConfig.apiKey && firebaseConfig.apiKey !== "YOUR_API_KEY" &&
+  firebaseConfig.apiKey && firebaseConfig.apiKey !== "YOUR_API_KEY" && // Ensure it's not the placeholder
   firebaseConfig.authDomain &&
-  firebaseConfig.projectId && firebaseConfig.projectId !== "YOUR_PROJECT_ID" &&
+  firebaseConfig.projectId && firebaseConfig.projectId !== "YOUR_PROJECT_ID" && // Ensure it's not the placeholder
   firebaseConfig.storageBucket &&
   firebaseConfig.messagingSenderId &&
   firebaseConfig.appId;
@@ -31,16 +31,21 @@ if (isFirebaseConfigured) {
   }
   db = getFirestore(app);
 } else {
-  if (process.env.NODE_ENV !== 'production' && typeof window !== 'undefined') {
-    console.warn(
-      "Firebase is not configured. Please set up your Firebase environment variables in .env.local. Using in-memory data for now."
-    );
-  } else if (process.env.NODE_ENV !== 'production') {
+  // Check if running in a browser environment (client-side)
+  if (typeof window !== 'undefined') {
+    if (process.env.NODE_ENV !== 'production') {
+      console.warn(
+        "Firebase is not configured for the client. Please set up your Firebase environment variables in .env. Operations requiring Firebase will fail or use defaults. Check for NEXT_PUBLIC_ prefixes."
+      );
+    }
+  } else { // Running on the server
+    if (process.env.NODE_ENV !== 'production') {
      console.warn(
-      "Firebase is not configured on the server. Please set up your Firebase environment variables. Operations requiring Firebase will fail or use defaults."
+      "Firebase is not configured on the server. Please set up your Firebase environment variables. Operations requiring Firebase will fail or use defaults. Ensure .env file is loaded and server is restarted."
     );
+    }
   }
-  // Assign null or mock implementations if needed, but for this prototype, operations will likely use defaults or fail if db is not initialized.
+  // Assign null or mock implementations if needed, but for this prototype, operations will likely use defaults if db is not initialized.
   // @ts-ignore - app and db might be uninitialized if config is missing
   app = null; 
   // @ts-ignore
