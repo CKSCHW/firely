@@ -23,11 +23,13 @@ import type { DisplayDevice, Playlist } from "@/lib/types";
 import { useEffect, useState } from "react";
 import { Loader2 } from "lucide-react";
 
+const NO_PLAYLIST_VALUE = "__NO_PLAYLIST__";
+
 const formSchema = z.object({
   deviceName: z.string().min(3, {
     message: "Device name must be at least 3 characters.",
   }),
-  currentPlaylistId: z.string().optional(), // Optional, can be empty string or undefined
+  currentPlaylistId: z.string().optional(), 
 });
 
 type DeviceFormValues = z.infer<typeof formSchema>;
@@ -54,7 +56,7 @@ export default function DeviceEditForm({ deviceId }: DeviceEditFormProps) {
   useEffect(() => {
     async function loadDeviceData() {
       setIsLoadingData(true);
-      await ensureDataLoaded(); // Ensure all data is loaded
+      await ensureDataLoaded(); 
 
       const deviceToEdit = mockDevices.find(d => d.id === deviceId);
       setAvailablePlaylists([...mockPlaylists]);
@@ -62,7 +64,7 @@ export default function DeviceEditForm({ deviceId }: DeviceEditFormProps) {
       if (deviceToEdit) {
         form.reset({
           deviceName: deviceToEdit.name,
-          currentPlaylistId: deviceToEdit.currentPlaylistId || undefined, // Handle undefined/empty string
+          currentPlaylistId: deviceToEdit.currentPlaylistId || undefined, 
         });
       } else {
         toast({
@@ -74,7 +76,9 @@ export default function DeviceEditForm({ deviceId }: DeviceEditFormProps) {
       }
       setIsLoadingData(false);
     }
-    loadDeviceData();
+    if (deviceId) { // Ensure deviceId is present before loading
+      loadDeviceData();
+    }
   }, [deviceId, form, router, toast]);
 
   async function onSubmit(values: DeviceFormValues) {
@@ -82,7 +86,7 @@ export default function DeviceEditForm({ deviceId }: DeviceEditFormProps) {
     try {
       const result = await updateMockDevice(deviceId, {
         name: values.deviceName,
-        currentPlaylistId: values.currentPlaylistId || undefined, // Send undefined if empty string
+        currentPlaylistId: values.currentPlaylistId || undefined, 
       });
 
       if (result) {
@@ -114,7 +118,7 @@ export default function DeviceEditForm({ deviceId }: DeviceEditFormProps) {
     }
   }
 
-  if (isLoadingData) {
+  if (isLoadingData && deviceId) { // Also check deviceId here for consistency
     return (
       <div className="flex justify-center items-center py-10">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -146,8 +150,10 @@ export default function DeviceEditForm({ deviceId }: DeviceEditFormProps) {
             <FormItem>
               <FormLabel className="font-headline">Assigned Playlist</FormLabel>
               <Select 
-                onValueChange={field.onChange} 
-                value={field.value || ""} // Ensure value is controlled, use empty string for "None"
+                onValueChange={(value) => {
+                  field.onChange(value === NO_PLAYLIST_VALUE ? undefined : value);
+                }} 
+                value={field.value || NO_PLAYLIST_VALUE} 
                 disabled={isSubmitting}
               >
                 <FormControl>
@@ -156,7 +162,7 @@ export default function DeviceEditForm({ deviceId }: DeviceEditFormProps) {
                   </SelectTrigger>
                 </FormControl>
                 <SelectContent>
-                  <SelectItem value="">No Playlist (None)</SelectItem>
+                  <SelectItem value={NO_PLAYLIST_VALUE}>No Playlist (None)</SelectItem>
                   {availablePlaylists.map(playlist => (
                     <SelectItem key={playlist.id} value={playlist.id}>
                       {playlist.name}
@@ -182,7 +188,7 @@ export default function DeviceEditForm({ deviceId }: DeviceEditFormProps) {
           >
             Cancel
           </Button>
-          <Button type="submit" form="device-edit-form" className="font-headline" disabled={isSubmitting || isLoadingData}>
+          <Button type="submit" form="device-edit-form" className="font-headline" disabled={isSubmitting || (isLoadingData && !!deviceId) }>
              {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
             {isSubmitting ? 'Saving...' : 'Save Changes'}
           </Button>
