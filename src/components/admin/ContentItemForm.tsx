@@ -23,6 +23,7 @@ import { useToast } from "@/hooks/use-toast";
 import { addMockContentItem, updateMockContentItem, availableContentItems } from "@/data/mockData";
 import type { ContentItem } from "@/lib/types";
 import { useEffect, useState } from "react";
+import { UploadCloud } from "lucide-react";
 
 const contentItemFormSchema = z.object({
   title: z.string().min(3, { message: "Title must be at least 3 characters." }),
@@ -70,10 +71,7 @@ export default function ContentItemForm({ contentId }: ContentItemFormProps) {
 
   useEffect(() => {
     if (watchedType === "image" && form.formState.errors.url === undefined && watchedUrl) {
-      // Basic check to see if it might be an image URL for preview
-      if (/\.(jpeg|jpg|gif|png|webp)$/i.test(watchedUrl)) {
-         setPreviewUrl(watchedUrl);
-      } else if (watchedUrl.startsWith("https://placehold.co/")) {
+      if (/\.(jpeg|jpg|gif|png|webp)$/i.test(watchedUrl) || watchedUrl.startsWith("https://placehold.co/")) {
          setPreviewUrl(watchedUrl);
       } else {
         setPreviewUrl(undefined);
@@ -183,12 +181,15 @@ export default function ContentItemForm({ contentId }: ContentItemFormProps) {
           name="url"
           render={({ field }) => (
             <FormItem>
-              <FormLabel className="font-headline">URL</FormLabel>
+              <FormLabel className="font-headline flex items-center">
+                <UploadCloud className="w-4 h-4 mr-2 text-muted-foreground" />
+                Content URL / Source
+              </FormLabel>
               <FormControl>
                 <Input placeholder="https://example.com/resource.png" {...field} className="font-body"/>
               </FormControl>
               <FormDescription className="font-body">
-                Direct link to the image, video, web page, or PDF document. For image placeholders, use e.g., https://placehold.co/600x400.png
+                For now, please provide a direct URL to the content. Actual file upload functionality requires backend setup and will be added later. For image placeholders, use e.g., https://placehold.co/600x400.png
               </FormDescription>
               <FormMessage />
             </FormItem>
@@ -238,8 +239,8 @@ export default function ContentItemForm({ contentId }: ContentItemFormProps) {
             </FormItem>
           )}
         />
-        {/* Submit buttons are handled by the parent page that includes this form */}
       </form>
     </Form>
   );
 }
+
