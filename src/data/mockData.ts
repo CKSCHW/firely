@@ -2,14 +2,16 @@
 import type { Playlist, DisplayDevice, ContentItem, AvailableContent, ScheduleEntry } from '@/lib/types';
 import { v4 as uuidv4 } from 'uuid';
 import { db, isFirebaseConfigured } from '@/lib/firebase'; // Import Firestore instance
-import { collection, doc, setDoc, getDocs, deleteDoc, writeBatch, query } from 'firebase/firestore';
+import { collection, doc, setDoc, getDocs, deleteDoc, writeBatch, query, FieldValue } from 'firebase/firestore';
 
 // Helper function to remove undefined properties from an object
 function removeUndefinedProps(obj: any): any {
   const newObj: any = {};
   for (const key in obj) {
-    if (obj[key] !== undefined) {
-      newObj[key] = obj[key];
+    if (Object.prototype.hasOwnProperty.call(obj, key)) { // Ensure it's an own property
+      if (obj[key] !== undefined) {
+        newObj[key] = obj[key];
+      }
     }
   }
   return newObj;
@@ -135,14 +137,11 @@ export async function ensureDataLoaded() {
           const batch = writeBatch(db);
           JSON.parse(JSON.stringify(defaultData)).forEach((item: T) => {
             const docRef = doc(db, collectionName, item.id);
-            // For playlists, ensure items are plain objects if they contain nested objects like ContentItem
             let dataToSet = item;
             if (collectionName === 'playlists' && (item as any).items) {
                 dataToSet = { ...item, items: (item as any).items.map((subItem: any) => removeUndefinedProps({...subItem})) };
-            } else {
-                dataToSet = removeUndefinedProps({...item});
             }
-            batch.set(docRef, dataToSet, dataToSet);
+            batch.set(docRef, removeUndefinedProps(dataToSet));
           });
           await batch.commit();
           inMemoryArray.splice(0, inMemoryArray.length, ...JSON.parse(JSON.stringify(defaultData)));
@@ -194,25 +193,41 @@ export async function ensureDataLoaded() {
 
 export async function addMockDevice(name: string): Promise<DisplayDevice> {
   await ensureDataLoaded();
-  const newDevice: DisplayDevice = {
-    id: `display-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+  const deviceId = `display-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+  const currentTime = new Date().toISOString();
+
+  // Object to be stored in Firestore. Explicitly omits currentPlaylistId.
+  const firestoreData: Omit<DisplayDevice, 'id' | 'currentPlaylistId' | 'status' | 'lastSeen' | 'schedule'> & { name: string, status: 'online' | 'offline', lastSeen: string, schedule: ScheduleEntry[], currentPlaylistId?: string } = {
     name,
-    status: 'online', 
-    lastSeen: new Date().toISOString(),
-    // currentPlaylistId will be undefined by default if not assigned
+    status: 'online',
+    lastSeen: currentTime,
+    schedule: [],
+    // currentPlaylistId is intentionally NOT included here
+  };
+
+  // Full object for in-memory cache and return type, matches DisplayDevice type.
+  const newDeviceInMemory: DisplayDevice = {
+    id: deviceId,
+    name,
+    status: 'online',
+    lastSeen: currentTime,
+    // currentPlaylistId is implicitly undefined here, which is fine for the TS type.
     schedule: [],
   };
+
   if (isFirebaseConfigured && db) {
     try {
-      await setDoc(doc(db, 'devices', newDevice.id), removeUndefinedProps(newDevice));
+      // Pass the explicitly constructed firestoreData, still wrapped in removeUndefinedProps for other potential fields.
+      await setDoc(doc(db, 'devices', deviceId), removeUndefinedProps(firestoreData));
     } catch (error) {
       console.error("Error adding device to Firestore: ", error);
-      throw error;
+      throw error; // Re-throw to be caught by the server action
     }
   }
-  mockDevices.push(newDevice); 
-  return newDevice;
+  mockDevices.push(newDeviceInMemory); 
+  return newDeviceInMemory;
 }
+
 
 export async function updateMockDevice(deviceId: string, updates: Partial<Omit<DisplayDevice, 'id' | 'lastSeen' | 'status'>> & { schedule?: ScheduleEntry[] }): Promise<DisplayDevice | undefined> {
   await ensureDataLoaded();
@@ -222,27 +237,31 @@ export async function updateMockDevice(deviceId: string, updates: Partial<Omit<D
     return undefined;
   }
   
-  const updatedDeviceData: DisplayDevice = {
+  // Construct the full updated object for in-memory
+   const updatedDeviceInMemory: DisplayDevice = {
     ...mockDevices[deviceIndex],
     name: updates.name ?? mockDevices[deviceIndex].name,
-    currentPlaylistId: updates.currentPlaylistId, 
-    schedule: updates.schedule ?? mockDevices[deviceIndex].schedule, 
-    // Retain original status and lastSeen unless explicitly updated, which they are not here.
-    status: mockDevices[deviceIndex].status,
-    lastSeen: mockDevices[deviceIndex].lastSeen,
+    currentPlaylistId: 'currentPlaylistId' in updates ? updates.currentPlaylistId : mockDevices[deviceIndex].currentPlaylistId, // Handle explicit undefined
+    schedule: updates.schedule ?? mockDevices[deviceIndex].schedule,
+    lastSeen: new Date().toISOString(), // Or keep original if not meant to update on every change
   };
+
 
   if (isFirebaseConfigured && db) {
     try {
-      // Use merge: true to only update specified fields and not overwrite others like status/lastSeen unintentionally
-      await setDoc(doc(db, 'devices', deviceId), removeUndefinedProps(updates), { merge: true });
+      // For Firestore, send only the 'updates' object, cleaned of undefined values.
+      // Firestore's merge:true will handle applying these changes to the existing document.
+      const firestoreUpdates = removeUndefinedProps(updates);
+      if (Object.keys(firestoreUpdates).length > 0) { // Only update if there are actual changes
+        await setDoc(doc(db, 'devices', deviceId), firestoreUpdates, { merge: true });
+      }
     } catch (error) {
       console.error("Error updating device in Firestore: ", error);
       throw error;
     }
   }
-  mockDevices[deviceIndex] = updatedDeviceData; 
-  return updatedDeviceData;
+  mockDevices[deviceIndex] = updatedDeviceInMemory; 
+  return updatedDeviceInMemory;
 }
 
 export async function deleteMockDevice(deviceId: string): Promise<boolean> {
@@ -268,14 +287,13 @@ export async function addMockPlaylist(name: string, description: string | undefi
     id: `playlist-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
     name,
     description,
-    items: itemIds.map(id => availableContentItems.find(item => item.id === id)).filter(Boolean).map(ci => ({...ci})) as ContentItem[],
+    items: itemIds.map(id => availableContentItems.find(item => item.id === id)).filter(Boolean).map(ci => removeUndefinedProps({...ci})) as ContentItem[],
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   };
   if (isFirebaseConfigured && db) {
     try {
-      const firestorePlaylist = { ...newPlaylist, items: newPlaylist.items.map(item => removeUndefinedProps({...item})) };
-      await setDoc(doc(db, 'playlists', newPlaylist.id), removeUndefinedProps(firestorePlaylist));
+      await setDoc(doc(db, 'playlists', newPlaylist.id), removeUndefinedProps(newPlaylist));
     } catch (error) {
       console.error("Error adding playlist to Firestore: ", error);
       throw error;
@@ -295,15 +313,13 @@ export async function updateMockPlaylist(playlistId: string, name: string, descr
     ...mockPlaylists[playlistIndex],
     name,
     description,
-    items: itemIds.map(itemId => availableContentItems.find(item => item.id === itemId)).filter(Boolean).map(ci => ({...ci})) as ContentItem[],
+    items: itemIds.map(itemId => availableContentItems.find(item => item.id === itemId)).filter(Boolean).map(ci => removeUndefinedProps({...ci})) as ContentItem[],
     updatedAt: new Date().toISOString(),
   };
 
   if (isFirebaseConfigured && db) {
     try {
-      const firestorePlaylist = { ...updatedPlaylistData, items: updatedPlaylistData.items.map(item => removeUndefinedProps({...item})) };
-      // Use merge: true for updates
-      await setDoc(doc(db, 'playlists', playlistId), removeUndefinedProps(firestorePlaylist), { merge: true });
+      await setDoc(doc(db, 'playlists', playlistId), removeUndefinedProps(updatedPlaylistData), { merge: true });
     } catch (error) {
       console.error("Error updating playlist in Firestore: ", error);
       throw error;
@@ -342,7 +358,6 @@ export async function updateMockContentItem(contentId: string, itemData: Partial
 
   if (isFirebaseConfigured && db) {
     try {
-      // Use merge: true for updates
       await setDoc(doc(db, 'contentItems', contentId), removeUndefinedProps(itemData), { merge: true }); 
       
       const playlistsSnapshot = await getDocs(collection(db, "playlists"));
@@ -354,7 +369,6 @@ export async function updateMockContentItem(contentId: string, itemData: Partial
         const updatedItems = playlist.items.map(item => {
           if (item.id === contentId) {
             playlistModifiedThisIteration = true;
-            // Ensure the item being put into the playlist is also cleaned
             return removeUndefinedProps({...updatedItemData}); 
           }
           return removeUndefinedProps({...item});
@@ -424,4 +438,4 @@ export async function deleteMockContentItem(contentId: string): Promise<boolean>
   return true;
 }
 
-
+    
