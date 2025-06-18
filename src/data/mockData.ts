@@ -6,19 +6,28 @@ import { collection, doc, setDoc, getDoc, getDocs, deleteDoc, writeBatch, query,
 
 // Helper function to remove properties with undefined values
 function removeUndefinedProps(obj: any): any {
+  if (typeof obj !== 'object' || obj === null) return obj;
+
+  if (Array.isArray(obj)) {
+    // For arrays, map over items, remove undefined props from objects, and filter out any standalone undefined values
+    return obj.map(item => (typeof item === 'object' && item !== null) ? removeUndefinedProps(item) : item)
+               .filter(item => item !== undefined);
+  }
+
   const newObj: any = {};
   for (const key in obj) {
     if (Object.prototype.hasOwnProperty.call(obj, key)) { 
       const value = obj[key];
       if (value !== undefined) {
-        if (Array.isArray(value)) {
-          newObj[key] = value.map(item => (typeof item === 'object' && item !== null) ? removeUndefinedProps(item) : item);
-        } else if (typeof value === 'object' && value !== null && !(value instanceof Date)) { // Keep Date objects as is
-          newObj[key] = removeUndefinedProps(value);
+        if (value instanceof Date) { // Keep Date objects as is
+          newObj[key] = value;
+        } else if (typeof value === 'object' && value !== null) {
+          newObj[key] = removeUndefinedProps(value); // Recurse for nested objects
         } else {
           newObj[key] = value;
         }
       }
+      // If value is undefined, the key is simply not added to newObj
     }
   }
   return newObj;
@@ -78,7 +87,7 @@ const defaultDevices: DisplayDevice[] = [
     id: 'display-102',
     name: 'Cafeteria Screen (East Wall)',
     status: 'offline',
-    lastSeen: new Date(Date.now() - 1000 * 60 * 60 * 24 * 3).toISOString(), // Older lastSeen for testing
+    lastSeen: new Date(Date.now() - 1000 * 60 * 60 * 24 * 3).toISOString(), 
     currentPlaylistId: 'playlist-2',
     schedule: []
   },
@@ -112,12 +121,10 @@ function reSyncAiAvailableContent() {
 
 export async function ensureDataLoaded() {
   if (isDataLoaded) {
-    // console.log('Data already loaded, skipping Firestore fetch.');
     return;
   }
 
   if (loadingPromise) {
-    // console.log('Data loading already in progress, awaiting existing promise.');
     await loadingPromise;
     return;
   }
@@ -144,7 +151,6 @@ export async function ensureDataLoaded() {
           JSON.parse(JSON.stringify(defaultData)).forEach((item: T) => {
             const docRef = doc(db, collectionName, item.id);
             let dataToSet = item;
-             // Special handling for playlist items and device.currentPlaylistId during default data init
             if (collectionName === 'playlists' && (item as any).items) {
                 dataToSet = { ...item, items: (item as any).items.map((subItem: any) => removeUndefinedProps({...subItem})) };
             } else if (collectionName === 'devices') {
@@ -188,7 +194,6 @@ export async function ensureDataLoaded() {
       console.log('Initial data load from Firestore complete.');
     } catch (error) {
         console.error('Error during parallel data loading from Firestore:', error);
-        // Fallback or ensure data is set to defaults if critical error
         availableContentItems.splice(0, availableContentItems.length, ...JSON.parse(JSON.stringify(defaultContentItems)));
         mockPlaylists.splice(0, mockPlaylists.length, ...JSON.parse(JSON.stringify(defaultPlaylists)));
         mockDevices.splice(0, mockDevices.length, ...JSON.parse(JSON.stringify(defaultDevices)));
@@ -208,32 +213,31 @@ export async function ensureDataLoaded() {
   }
 }
 
-export async function addMockDevice(deviceId: string, name: string): Promise<{ success: boolean; device?: DisplayDevice; message?: string }> {
+export async function addMockDevice(deviceId: string, name: string): Promise<{ success: true; device: DisplayDevice } | { success: false; message: string }> {
   await ensureDataLoaded();
   const currentTime = new Date().toISOString();
 
-  // Explicitly define the object for Firestore, ensuring NO currentPlaylistId for new devices.
   const firestoreData = {
-    id: deviceId, // ID is part of the path but can also be in the doc body
+    id: deviceId, 
     name,
     status: 'online' as 'online' | 'offline',
     lastSeen: currentTime,
     schedule: [] as ScheduleEntry[],
-    // currentPlaylistId is intentionally omitted here.
+    // currentPlaylistId is INTENTIONALLY OMITTED HERE
   };
 
   if (isFirebaseConfigured && db) {
+    const deviceDocRef = doc(db, 'devices', deviceId);
     try {
-      const deviceDocRef = doc(db, 'devices', deviceId);
       const deviceDocSnap = await getDoc(deviceDocRef);
       if (deviceDocSnap.exists()) {
         return { success: false, message: `Device with ID "${deviceId}" already exists.` };
       }
-      // removeUndefinedProps is a general safeguard, but firestoreData here should be clean.
-      await setDoc(deviceDocRef, removeUndefinedProps(firestoreData)); 
-    } catch (error) {
-      console.error("Error adding device to Firestore: ", error);
-      return { success: false, message: `Error adding device to Firestore: ${error instanceof Error ? error.message : String(error)}`};
+      await setDoc(deviceDocRef, removeUndefinedProps(firestoreData));
+    } catch (dbError) {
+      console.error("Error adding device to Firestore (within addMockDevice): ", dbError);
+      // Throw the error to be caught by the server action
+      throw new Error(`Firestore operation failed: ${dbError instanceof Error ? dbError.message : String(dbError)}`);
     }
   }
 
@@ -266,25 +270,30 @@ export async function updateMockDevice(deviceId: string, updates: Partial<Omit<D
    const updatedDeviceInMemory: DisplayDevice = {
     ...mockDevices[deviceIndex],
     name: updates.name !== undefined ? updates.name : mockDevices[deviceIndex].name,
-    currentPlaylistId: 'currentPlaylistId' in updates ? updates.currentPlaylistId : mockDevices[deviceIndex].currentPlaylistId,
     schedule: updates.schedule !== undefined ? updates.schedule : mockDevices[deviceIndex].schedule,
-    // lastSeen is updated by heartbeat
-  };
-   // If currentPlaylistId is explicitly undefined in updates, it should remain undefined in updatedDeviceInMemory
-   if ('currentPlaylistId' in updates && updates.currentPlaylistId === undefined) {
-    delete updatedDeviceInMemory.currentPlaylistId; // Or set to undefined if your type allows/expects it
+   };
+
+   if ('currentPlaylistId' in updates) {
+    if (updates.currentPlaylistId === undefined || updates.currentPlaylistId === null || updates.currentPlaylistId === "__NO_PLAYLIST__") {
+      delete updatedDeviceInMemory.currentPlaylistId;
+    } else {
+      updatedDeviceInMemory.currentPlaylistId = updates.currentPlaylistId;
+    }
    }
 
 
   if (isFirebaseConfigured && db) {
     try {
       const firestoreUpdates: any = { ...updates };
-      // lastSeen and status are managed by heartbeat or other specific actions, not generic update
       delete firestoreUpdates.lastSeen;
       delete firestoreUpdates.status;
 
+      if ('currentPlaylistId' in firestoreUpdates && (firestoreUpdates.currentPlaylistId === undefined || firestoreUpdates.currentPlaylistId === null || firestoreUpdates.currentPlaylistId === "__NO_PLAYLIST__")) {
+        firestoreUpdates.currentPlaylistId = deleteField(); // Use deleteField to remove the field in Firestore
+      }
+
       const cleanFirestoreUpdates = removeUndefinedProps(firestoreUpdates);
-      if (Object.keys(cleanFirestoreUpdates).length > 0) { 
+      if (Object.keys(cleanFirestoreUpdates).length > 0 || 'currentPlaylistId' in firestoreUpdates) { 
         await setDoc(doc(db, 'devices', deviceId), cleanFirestoreUpdates, { merge: true });
       }
     } catch (error) {
@@ -296,9 +305,13 @@ export async function updateMockDevice(deviceId: string, updates: Partial<Omit<D
   return updatedDeviceInMemory;
 }
 
+// Re-import deleteField from 'firebase/firestore' if it was removed or use it correctly.
+// Assuming it's available or needs to be added to imports if not already.
+import { deleteField } from 'firebase/firestore';
+
+
 export async function updateMockDeviceHeartbeat(deviceId: string): Promise<DisplayDevice | undefined> {
   await ensureDataLoaded();
-  console.log(`[mockData] Attempting heartbeat for device: ${deviceId}`);
   const deviceIndex = mockDevices.findIndex(d => d.id === deviceId);
 
   if (deviceIndex === -1) {
@@ -325,7 +338,6 @@ export async function updateMockDeviceHeartbeat(deviceId: string): Promise<Displ
         lastSeen: newLastSeen,
         status: newStatus,
       });
-      console.log(`[mockData] Firestore heartbeat updated for ${deviceId}`);
     } catch (error) {
       console.error(`[mockData] Error updating heartbeat in Firestore for ${deviceId}:`, error);
     }
@@ -337,7 +349,6 @@ export async function updateMockDeviceHeartbeat(deviceId: string): Promise<Displ
       lastSeen: newLastSeen,
       status: newStatus,
     };
-    console.log(`[mockData] In-memory heartbeat updated for ${deviceId}`);
     return mockDevices[deviceIndex];
   } else if (isFirebaseConfigured && db) { 
      const deviceSnap = await getDoc(doc(db, 'devices', deviceId));

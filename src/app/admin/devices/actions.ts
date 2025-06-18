@@ -6,6 +6,7 @@ import { addMockDevice, updateMockDevice, updateMockDeviceHeartbeat } from '@/da
 import type { ScheduleEntry } from '@/lib/types';
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
+import { deleteField } from 'firebase/firestore'; // Ensure this is imported if used in updateMockDevice
 
 const deviceFormSchema = z.object({
   deviceName: z.string().min(3, {
@@ -21,11 +22,18 @@ export async function updateDeviceAction(
   schedule: ScheduleEntry[]
 ) {
   try {
-    const result = await updateMockDevice(deviceId, {
+    const updatePayload: any = {
       name: values.deviceName,
-      currentPlaylistId: values.currentPlaylistId || undefined, 
       schedule: schedule,
-    });
+    };
+
+    if (values.currentPlaylistId === undefined || values.currentPlaylistId === null || values.currentPlaylistId === "__NO_PLAYLIST__") {
+      updatePayload.currentPlaylistId = deleteField(); // Special marker for deletion
+    } else {
+      updatePayload.currentPlaylistId = values.currentPlaylistId;
+    }
+    
+    const result = await updateMockDevice(deviceId, updatePayload);
 
     if (!result) {
       return { success: false, message: 'Device not found or update failed.' };
@@ -53,20 +61,21 @@ const registerDeviceFormSchema = z.object({
 
 export async function registerDeviceAction(values: z.infer<typeof registerDeviceFormSchema>) {
   try {
+    // addMockDevice now throws on critical DB error, or returns {success: false, message} for logical errors
     const result = await addMockDevice(values.deviceId, values.deviceName);
-    if (result.success === false) {
-      // If addMockDevice indicates a failure (e.g., ID exists, Firestore error), return the error message
+
+    if (!result.success) { // Handles logical errors like "ID already exists"
       return { success: false, message: result.message };
     }
-    // If addMockDevice was successful (result.success is true or not explicitly false)
-    // then proceed to revalidate and redirect.
+    // If result.success is true, proceed to revalidate and redirect
+    
   } catch (error) {
-    // Catch any unexpected errors during the addMockDevice call or other logic
-    console.error("Error registering device action:", error);
-    return { success: false, message: error instanceof Error ? error.message : 'Registration failed due to an unexpected error.' };
+    // Catches errors thrown by addMockDevice (e.g., Firestore errors) or other unexpected errors
+    console.error("Error in registerDeviceAction catch block:", error);
+    return { success: false, message: error instanceof Error ? error.message : 'Registration failed due to an unexpected server error.' };
   }
 
-  // Only redirect if the try block completed successfully without returning an error object.
+  // Only reached if addMockDevice was successful and didn't throw or return {success: false}
   revalidatePath('/admin/devices');
   redirect('/admin/devices');
 }
@@ -77,13 +86,10 @@ export async function updateDeviceHeartbeatAction(deviceId: string) {
     return { success: false, message: 'Device ID is required for heartbeat.' };
   }
   try {
-    console.log(`Server Action: Received heartbeat for device ${deviceId}`);
     const result = await updateMockDeviceHeartbeat(deviceId);
     if (!result) {
-      console.warn(`Server Action: Heartbeat update failed for device ${deviceId}, device not found or update error.`);
       return { success: false, message: 'Device not found or heartbeat update failed.' };
     }
-    console.log(`Server Action: Heartbeat successful for device ${deviceId}`);
     return { success: true };
   } catch (error) {
     console.error(`Server Action: Error processing heartbeat for device ${deviceId}:`, error);
