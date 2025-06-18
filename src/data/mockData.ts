@@ -1,8 +1,10 @@
 
 import type { Playlist, DisplayDevice, ContentItem, AvailableContent, ScheduleEntry } from '@/lib/types';
 import { v4 as uuidv4 } from 'uuid';
+import { db, isFirebaseConfigured } from '@/lib/firebase'; // Import Firestore instance
+import { collection, doc, setDoc, getDocs, deleteDoc, writeBatch, query, getDoc } from 'firebase/firestore';
 
-// Initial default data (used if JSON files don't exist or are empty, or on client-side if FS ops are skipped)
+// Default data (used to seed Firestore if empty, or as fallback if Firebase isn't configured)
 const defaultContentItems: ContentItem[] = [
   { id: 'content-1', type: 'image', url: 'https://placehold.co/1920x1080/FF9800/3F51B5?text=Orange+Promo', duration: 7, title: 'Special Orange Promotion', dataAiHint: 'promotion sale' },
   { id: 'content-2', type: 'image', url: 'https://placehold.co/1920x1080/3F51B5/FFFFFF?text=Company+News+Update', duration: 10, title: 'Latest Company News', dataAiHint: 'corporate announcement' },
@@ -43,7 +45,7 @@ const defaultDevices: DisplayDevice[] = [
     lastSeen: new Date().toISOString(),
     currentPlaylistId: 'playlist-1',
     schedule: [
-      { id: uuidv4(), playlistId: 'playlist-2', startTime: '09:00', endTime: '17:00', daysOfWeek: [1,2,3,4,5] } // Mon-Fri, 9 AM - 5 PM
+      { id: uuidv4(), playlistId: 'playlist-2', startTime: '09:00', endTime: '17:00', daysOfWeek: [1,2,3,4,5] }
     ]
   },
   {
@@ -61,100 +63,19 @@ const defaultDevices: DisplayDevice[] = [
     lastSeen: new Date().toISOString(),
     currentPlaylistId: 'playlist-1',
     schedule: [
-      { id: uuidv4(), playlistId: 'playlist-2', startTime: '08:00', endTime: '12:00', daysOfWeek: [1,2,3,4,5] }, // Mon-Fri, 8 AM - 12 PM
-      { id: uuidv4(), playlistId: 'playlist-1', startTime: '12:01', endTime: '18:00', daysOfWeek: [1,2,3,4,5] }  // Mon-Fri, 12:01 PM - 6 PM
+      { id: uuidv4(), playlistId: 'playlist-2', startTime: '08:00', endTime: '12:00', daysOfWeek: [1,2,3,4,5] },
+      { id: uuidv4(), playlistId: 'playlist-1', startTime: '12:01', endTime: '18:00', daysOfWeek: [1,2,3,4,5] }
     ]
   }
 ];
 
-const contentItemsJsonFile = 'contentItems.json';
-const playlistsJsonFile = 'playlists.json';
-const devicesJsonFile = 'devices.json';
-
-export let availableContentItems: ContentItem[] = [...defaultContentItems];
-export let mockPlaylists: Playlist[] = [...defaultPlaylists];
-export let mockDevices: DisplayDevice[] = [...defaultDevices];
+// In-memory caches
+export let availableContentItems: ContentItem[] = [];
+export let mockPlaylists: Playlist[] = [];
+export let mockDevices: DisplayDevice[] = [];
 export let aiAvailableContent: AvailableContent[] = [];
 
 let isDataLoaded = false;
-
-async function writeDataInternal<T>(
-    filePath: string,
-    data: T[],
-    fsMod: any, 
-    pathMod: any, 
-    dataDir: string
-): Promise<void> {
-  if (typeof window === 'undefined') { 
-    try {
-      await fsMod.mkdir(dataDir, { recursive: true });
-      await fsMod.writeFile(filePath, JSON.stringify(data, null, 2), 'utf-8');
-    } catch (error) {
-      console.error(`Error writing data to ${filePath}:`, error);
-    }
-  }
-}
-
-async function readData<T>(fileName: string, defaultData: T[] = []): Promise<T[]> {
-  if (typeof window !== 'undefined') {
-    return JSON.parse(JSON.stringify(defaultData));
-  }
-
-  let fsPromises, path;
-  try {
-    fsPromises = await import('fs/promises');
-    path = await import('path');
-    const dataDirLocal = path.join(process.cwd(), 'src', 'data');
-    const filePathLocal = path.join(dataDirLocal, fileName);
-
-    try {
-      await fsPromises.mkdir(dataDirLocal, { recursive: true });
-      const fileContent = await fsPromises.readFile(filePathLocal, 'utf-8');
-      const data = JSON.parse(fileContent);
-      if (Array.isArray(data) && data.length > 0) {
-        return data;
-      } else if (Array.isArray(data) && data.length === 0 && defaultData.length === 0) {
-        // If file exists and is an empty array, and default is also empty, return empty array.
-        return [];
-      }
-      else {
-        await writeDataInternal(filePathLocal, defaultData, fsPromises, path, dataDirLocal);
-        return JSON.parse(JSON.stringify(defaultData));
-      }
-    } catch (error: any) {
-      if (error.code === 'ENOENT') {
-        await writeDataInternal(filePathLocal, defaultData, fsPromises, path, dataDirLocal);
-        return JSON.parse(JSON.stringify(defaultData));
-      }
-      console.error(`Error reading or processing data from ${fileName} (server-side):`, error);
-      return JSON.parse(JSON.stringify(defaultData));
-    }
-  } catch (e) {
-    console.error(`Failed to import fs/promises or path on server:`, e);
-    return JSON.parse(JSON.stringify(defaultData));
-  }
-}
-
-
-async function writeDataToFile<T>(fileName: string, data: T[]): Promise<void> {
-  if (typeof window === 'undefined') { 
-    try {
-      const fsPromises = await import('fs/promises');
-      const path = await import('path');
-      const dataDirLocal = path.join(process.cwd(), 'src', 'data');
-      const filePathLocal = path.join(dataDirLocal, fileName);
-      
-      await fsPromises.mkdir(dataDirLocal, { recursive: true });
-      await fsPromises.writeFile(filePathLocal, JSON.stringify(data, null, 2), 'utf-8');
-      console.log(`Data successfully written to ${filePathLocal}`);
-    } catch (error) {
-      console.error(`Error writing data to ${fileName} (server-side):`, error);
-    }
-  } else {
-    console.warn(`File system write for ${fileName} skipped on client-side.`);
-  }
-}
-
 
 function reSyncAiAvailableContent() {
   aiAvailableContent = availableContentItems.map(item => ({
@@ -164,19 +85,56 @@ function reSyncAiAvailableContent() {
 }
 
 export async function ensureDataLoaded() {
-  if (!isDataLoaded) {
-    console.log('Initial data load starting...');
-    availableContentItems = await readData<ContentItem>(contentItemsJsonFile, defaultContentItems);
-    mockPlaylists = await readData<Playlist>(playlistsJsonFile, defaultPlaylists);
-    mockDevices = await readData<DisplayDevice>(devicesJsonFile, defaultDevices);
-    
-    reSyncAiAvailableContent();
+  if (isDataLoaded) return;
+
+  if (!isFirebaseConfigured || !db) {
+    console.warn("Firebase is not configured or not available. Using default in-memory data. Please set up Firebase environment variables.");
+    availableContentItems.splice(0, availableContentItems.length, ...JSON.parse(JSON.stringify(defaultContentItems)));
+    mockPlaylists.splice(0, mockPlaylists.length, ...JSON.parse(JSON.stringify(defaultPlaylists)));
+    mockDevices.splice(0, mockDevices.length, ...JSON.parse(JSON.stringify(defaultDevices)));
     isDataLoaded = true;
-    console.log('Initial data load complete.');
-    console.log('Loaded devices:', mockDevices.length);
-    console.log('Loaded playlists:', mockPlaylists.length);
-    console.log('Loaded content items:', availableContentItems.length);
+    reSyncAiAvailableContent();
+    return;
   }
+
+  const loadCollection = async <T extends { id: string }>(collectionName: string, defaultData: T[], inMemoryArray: T[]): Promise<void> => {
+    try {
+      const q = query(collection(db, collectionName));
+      const querySnapshot = await getDocs(q);
+      
+      if (querySnapshot.empty && defaultData.length > 0) {
+        console.log(`Firestore collection '${collectionName}' is empty. Initializing with default data...`);
+        const batch = writeBatch(db);
+        JSON.parse(JSON.stringify(defaultData)).forEach((item: T) => {
+          const docRef = doc(db, collectionName, item.id);
+          batch.set(docRef, item);
+        });
+        await batch.commit();
+        inMemoryArray.splice(0, inMemoryArray.length, ...JSON.parse(JSON.stringify(defaultData)));
+      } else {
+        const dataFromDb: T[] = [];
+        querySnapshot.forEach((docSnapshot) => {
+          // Ensure all fields, including id, are correctly mapped
+          dataFromDb.push({ ...docSnapshot.data(), id: docSnapshot.id } as T);
+        });
+        inMemoryArray.splice(0, inMemoryArray.length, ...dataFromDb);
+      }
+    } catch (error) {
+      console.error(`Error loading or initializing collection ${collectionName} from Firestore:`, error);
+      inMemoryArray.splice(0, inMemoryArray.length, ...JSON.parse(JSON.stringify(defaultData)));
+    }
+  };
+
+  console.log('Initial data load from Firestore starting...');
+  await Promise.all([
+    loadCollection<ContentItem>('contentItems', defaultContentItems, availableContentItems),
+    loadCollection<Playlist>('playlists', defaultPlaylists, mockPlaylists),
+    loadCollection<DisplayDevice>('devices', defaultDevices, mockDevices),
+  ]);
+
+  reSyncAiAvailableContent();
+  isDataLoaded = true;
+  console.log('Initial data load from Firestore complete.');
 }
 
 // --- Mutator Functions ---
@@ -191,38 +149,59 @@ export async function addMockDevice(name: string): Promise<DisplayDevice> {
     currentPlaylistId: undefined, 
     schedule: [],
   };
-  mockDevices.push(newDevice);
-  await writeDataToFile(devicesJsonFile, mockDevices);
+  if (isFirebaseConfigured && db) {
+    try {
+      await setDoc(doc(db, 'devices', newDevice.id), newDevice);
+    } catch (error) {
+      console.error("Error adding device to Firestore: ", error);
+      throw error;
+    }
+  }
+  mockDevices.push(newDevice); // Keep in-memory sync
   return newDevice;
 }
 
-export async function updateMockDevice(id: string, updates: Partial<Omit<DisplayDevice, 'id' | 'lastSeen' | 'status'>> & { schedule?: ScheduleEntry[] }): Promise<DisplayDevice | undefined> {
+export async function updateMockDevice(deviceId: string, updates: Partial<Omit<DisplayDevice, 'id' | 'lastSeen' | 'status'>> & { schedule?: ScheduleEntry[] }): Promise<DisplayDevice | undefined> {
   await ensureDataLoaded();
-  const deviceIndex = mockDevices.findIndex(d => d.id === id);
+  const deviceIndex = mockDevices.findIndex(d => d.id === deviceId);
   if (deviceIndex === -1) {
-    console.error(`Device with id ${id} not found for update.`);
+    console.error(`Device with id ${deviceId} not found for update.`);
     return undefined;
   }
   
-  mockDevices[deviceIndex] = {
+  const updatedDeviceData = {
     ...mockDevices[deviceIndex],
     name: updates.name ?? mockDevices[deviceIndex].name,
     currentPlaylistId: updates.currentPlaylistId, 
     schedule: updates.schedule ?? mockDevices[deviceIndex].schedule, 
   };
-  await writeDataToFile(devicesJsonFile, mockDevices);
-  return mockDevices[deviceIndex];
+
+  if (isFirebaseConfigured && db) {
+    try {
+      await setDoc(doc(db, 'devices', deviceId), updatedDeviceData);
+    } catch (error) {
+      console.error("Error updating device in Firestore: ", error);
+      throw error;
+    }
+  }
+  mockDevices[deviceIndex] = updatedDeviceData; // Keep in-memory sync
+  return updatedDeviceData;
 }
 
-export async function deleteMockDevice(id: string): Promise<boolean> {
+export async function deleteMockDevice(deviceId: string): Promise<boolean> {
   await ensureDataLoaded();
   const initialLength = mockDevices.length;
-  mockDevices = mockDevices.filter(d => d.id !== id);
-  if (mockDevices.length < initialLength) {
-    await writeDataToFile(devicesJsonFile, mockDevices);
-    return true;
+  
+  if (isFirebaseConfigured && db) {
+    try {
+      await deleteDoc(doc(db, 'devices', deviceId));
+    } catch (error) {
+      console.error("Error deleting device from Firestore: ", error);
+      throw error;
+    }
   }
-  return false;
+  mockDevices = mockDevices.filter(d => d.id !== deviceId); // Keep in-memory sync
+  return mockDevices.length < initialLength;
 }
 
 
@@ -236,27 +215,45 @@ export async function addMockPlaylist(name: string, description: string | undefi
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   };
-  mockPlaylists.push(newPlaylist);
-  await writeDataToFile(playlistsJsonFile, mockPlaylists);
+  if (isFirebaseConfigured && db) {
+    try {
+      // Firestore stores items as an array of objects. Ensure it's structured correctly.
+      const firestorePlaylist = { ...newPlaylist, items: newPlaylist.items.map(item => ({...item})) };
+      await setDoc(doc(db, 'playlists', newPlaylist.id), firestorePlaylist);
+    } catch (error) {
+      console.error("Error adding playlist to Firestore: ", error);
+      throw error;
+    }
+  }
+  mockPlaylists.push(newPlaylist); // Keep in-memory sync
   return newPlaylist;
 }
 
-export async function updateMockPlaylist(id: string, name: string, description: string | undefined, itemIds: string[]): Promise<Playlist | undefined> {
+export async function updateMockPlaylist(playlistId: string, name: string, description: string | undefined, itemIds: string[]): Promise<Playlist | undefined> {
   await ensureDataLoaded();
-  const playlistIndex = mockPlaylists.findIndex(p => p.id === id);
+  const playlistIndex = mockPlaylists.findIndex(p => p.id === playlistId);
   if (playlistIndex === -1) {
     return undefined;
   }
-  const updatedPlaylist: Playlist = {
+  const updatedPlaylistData: Playlist = {
     ...mockPlaylists[playlistIndex],
     name,
     description,
     items: itemIds.map(itemId => availableContentItems.find(item => item.id === itemId)).filter(Boolean) as ContentItem[],
     updatedAt: new Date().toISOString(),
   };
-  mockPlaylists[playlistIndex] = updatedPlaylist;
-  await writeDataToFile(playlistsJsonFile, mockPlaylists);
-  return updatedPlaylist;
+
+  if (isFirebaseConfigured && db) {
+    try {
+      const firestorePlaylist = { ...updatedPlaylistData, items: updatedPlaylistData.items.map(item => ({...item})) };
+      await setDoc(doc(db, 'playlists', playlistId), firestorePlaylist);
+    } catch (error) {
+      console.error("Error updating playlist in Firestore: ", error);
+      throw error;
+    }
+  }
+  mockPlaylists[playlistIndex] = updatedPlaylistData; // Keep in-memory sync
+  return updatedPlaylistData;
 }
 
 export async function addMockContentItem(itemData: Omit<ContentItem, 'id'>): Promise<ContentItem> {
@@ -265,47 +262,97 @@ export async function addMockContentItem(itemData: Omit<ContentItem, 'id'>): Pro
     id: `content-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
     ...itemData,
   };
-  availableContentItems.push(newItem);
+  if (isFirebaseConfigured && db) {
+    try {
+      await setDoc(doc(db, 'contentItems', newItem.id), newItem);
+    } catch (error) {
+      console.error("Error adding content item to Firestore: ", error);
+      throw error;
+    }
+  }
+  availableContentItems.push(newItem); // Keep in-memory sync
   reSyncAiAvailableContent();
-  await writeDataToFile(contentItemsJsonFile, availableContentItems);
   return newItem;
 }
 
-export async function updateMockContentItem(id: string, itemData: Partial<Omit<ContentItem, 'id'>>): Promise<ContentItem | undefined> {
+export async function updateMockContentItem(contentId: string, itemData: Partial<Omit<ContentItem, 'id'>>): Promise<ContentItem | undefined> {
   await ensureDataLoaded();
-  const itemIndex = availableContentItems.findIndex(item => item.id === id);
+  const itemIndex = availableContentItems.findIndex(item => item.id === contentId);
   if (itemIndex === -1) {
     return undefined;
   }
-  const updatedItem = { ...availableContentItems[itemIndex], ...itemData, id };
-  availableContentItems[itemIndex] = updatedItem;
-  reSyncAiAvailableContent();
+  const updatedItemData = { ...availableContentItems[itemIndex], ...itemData, id: contentId };
 
-  mockPlaylists = mockPlaylists.map(playlist => ({
+  if (isFirebaseConfigured && db) {
+    try {
+      await setDoc(doc(db, 'contentItems', contentId), updatedItemData);
+      // Also update item if it exists in any playlist in Firestore
+      const playlistsSnapshot = await getDocs(collection(db, "playlists"));
+      const batch = writeBatch(db);
+      playlistsSnapshot.forEach(playlistDoc => {
+        const playlist = playlistDoc.data() as Playlist;
+        let playlistModified = false;
+        const updatedItems = playlist.items.map(item => {
+          if (item.id === contentId) {
+            playlistModified = true;
+            return updatedItemData;
+          }
+          return item;
+        });
+        if (playlistModified) {
+          batch.update(doc(db, "playlists", playlist.id), { items: updatedItems.map(item => ({...item})), updatedAt: new Date().toISOString() });
+        }
+      });
+      await batch.commit();
+
+    } catch (error) {
+      console.error("Error updating content item or playlists in Firestore: ", error);
+      throw error;
+    }
+  }
+  availableContentItems[itemIndex] = updatedItemData; // Keep in-memory sync
+  mockPlaylists = mockPlaylists.map(playlist => ({ // Keep in-memory playlists sync
     ...playlist,
-    items: playlist.items.map(item => item.id === id ? updatedItem : item)
+    items: playlist.items.map(item => item.id === contentId ? updatedItemData : item),
+    updatedAt: playlist.items.some(item => item.id === contentId) ? new Date().toISOString() : playlist.updatedAt,
   }));
-  await writeDataToFile(contentItemsJsonFile, availableContentItems);
-  // Also write playlists if content items within them were updated (their references might change if not careful)
-  // The current updateMockContentItem correctly updates the items array in mockPlaylists by replacing the item.
-  await writeDataToFile(playlistsJsonFile, mockPlaylists); 
-  return updatedItem;
+  reSyncAiAvailableContent();
+  return updatedItemData;
 }
 
-export async function deleteMockContentItem(id: string): Promise<boolean> {
+export async function deleteMockContentItem(contentId: string): Promise<boolean> {
   await ensureDataLoaded();
-  const itemIndex = availableContentItems.findIndex(item => item.id === id);
+  const itemIndex = availableContentItems.findIndex(item => item.id === contentId);
   if (itemIndex === -1) {
     return false;
   }
-  availableContentItems.splice(itemIndex, 1);
-  reSyncAiAvailableContent();
 
-  mockPlaylists = mockPlaylists.map(playlist => ({
+  if (isFirebaseConfigured && db) {
+    try {
+      await deleteDoc(doc(db, 'contentItems', contentId));
+      // Also remove item from any playlist in Firestore
+      const playlistsSnapshot = await getDocs(collection(db, "playlists"));
+      const batch = writeBatch(db);
+      playlistsSnapshot.forEach(playlistDoc => {
+        const playlist = playlistDoc.data() as Playlist;
+        const originalItemCount = playlist.items.length;
+        const updatedItems = playlist.items.filter(item => item.id !== contentId);
+        if (updatedItems.length < originalItemCount) {
+           batch.update(doc(db, "playlists", playlist.id), { items: updatedItems.map(item => ({...item})), updatedAt: new Date().toISOString() });
+        }
+      });
+      await batch.commit();
+    } catch (error) {
+      console.error("Error deleting content item or updating playlists in Firestore: ", error);
+      throw error;
+    }
+  }
+  availableContentItems.splice(itemIndex, 1); // Keep in-memory sync
+  mockPlaylists = mockPlaylists.map(playlist => ({ // Keep in-memory playlists sync
     ...playlist,
-    items: playlist.items.filter(item => item.id !== id),
+    items: playlist.items.filter(item => item.id !== contentId),
+     updatedAt: playlist.items.some(item => item.id === contentId) ? new Date().toISOString() : playlist.updatedAt,
   }));
-  await writeDataToFile(contentItemsJsonFile, availableContentItems);
-  await writeDataToFile(playlistsJsonFile, mockPlaylists);
+  reSyncAiAvailableContent();
   return true;
 }
