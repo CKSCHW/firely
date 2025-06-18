@@ -3,7 +3,7 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import Image from 'next/image';
-import type { Playlist, ContentItem, DisplayDevice, ScheduleEntry } from '@/lib/types';
+import type { Playlist, ContentItem, DisplayDevice } from '@/lib/types';
 import { mockPlaylists, mockDevices, availableContentItems, ensureDataLoaded } from '@/data/mockData';
 import { ArrowLeftCircle, ArrowRightCircle, Loader2, AlertTriangle, EyeOff, Tv2, FileWarning, Maximize, Minimize } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -80,7 +80,7 @@ async function getActivePlaylistForDisplay(displayId: string): Promise<Playlist 
 
 export default function DisplayPage() {
   const paramsHook = useParams<{ displayId: string }>();
-  const displayId = paramsHook.displayId;
+  const displayId = paramsHook?.displayId; // Use optional chaining
 
   const [playlist, setPlaylist] = useState<Playlist | null>(null);
   const [currentItemIndex, setCurrentItemIndex] = useState(0);
@@ -134,7 +134,7 @@ export default function DisplayPage() {
   }, []);
 
   useEffect(() => {
-    setIsFullscreen(!!document.fullscreenElement);
+    setIsFullscreen(!!document.fullscreenElement); // Initial check
     document.addEventListener('fullscreenchange', handleFullscreenChange);
     return () => {
       document.removeEventListener('fullscreenchange', handleFullscreenChange);
@@ -219,7 +219,7 @@ export default function DisplayPage() {
     if (!playlist || playlist.items.length === 0 || isPaused || loading || error || contentError) return;
 
     const currentItem = playlist.items[currentItemIndex];
-    if (!currentItem) return; // Guard if currentItem is somehow undefined
+    if (!currentItem) return;
     
     const duration = (currentItem.duration || 10) * 1000;
     console.log(`[Display ${displayId}] Displaying item "${currentItem.title || currentItem.id}" for ${duration / 1000}s.`);
@@ -347,14 +347,12 @@ export default function DisplayPage() {
           />
         ) : <div className="w-full h-full flex items-center justify-center bg-gray-700 text-white"><FileWarning className="w-12 h-12 mr-2"/>Video-URL fehlt für "{item.title || item.id}"</div>;
       case 'pdf':
-        return item.url ? (
+         return item.url ? (
           <embed
             key={item.id}
             src={item.url}
             type="application/pdf"
             className="w-full h-full animate-fadeIn"
-            // onError is not reliably supported on embed for all browsers/viewers for content errors
-            // We rely on visual lack of content or browser's own error message within embed
           />
         ) : <div className="w-full h-full flex items-center justify-center bg-gray-700 text-white"><FileWarning className="w-12 h-12 mr-2"/>PDF URL fehlt für "{item.title || item.id}"</div>;
       case 'web': 
@@ -364,7 +362,7 @@ export default function DisplayPage() {
             src={item.url}
             title={item.title || `Display Inhalt ${currentItemIndex + 1}`}
             className="w-full h-full border-0 animate-fadeIn"
-            sandbox="allow-scripts allow-same-origin allow-popups allow-forms allow-modals allow-presentation" 
+            sandbox="allow-scripts allow-same-origin allow-popups allow-forms allow-modals allow-presentation allow-downloads" 
             onError={() => handleContentError(item, item.type)}
             onLoad={() => setContentError(null)} 
           />
@@ -421,3 +419,5 @@ export default function DisplayPage() {
     </div>
   );
 }
+
+    
