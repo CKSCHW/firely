@@ -60,20 +60,14 @@ export default function EditContentItemPage({ params }: { params: { contentId: s
         <CardHeader>
           <CardTitle className="font-headline">Content Item Configuration</CardTitle>
           <CardDescription className="font-body">
-            Modify the content item information.
+            Modify the content item information. Upload new files if needed.
           </CardDescription>
         </CardHeader>
         <CardContent>
           <ContentItemForm contentId={params.contentId} />
-          <div className="mt-8 flex justify-end gap-3 pt-4 border-t">
-            <Button variant="outline" asChild className="font-body">
-              <Link href="/admin/content">Cancel</Link>
-            </Button>
-            <Button type="submit" form="content-item-form" className="font-headline">Save Changes</Button>
-          </div>
+          {/* Submit buttons are now part of ContentItemForm itself */}
         </CardContent>
       </Card>
     </div>
   );
 }
-

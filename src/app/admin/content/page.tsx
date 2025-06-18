@@ -45,6 +45,8 @@ export default function ContentLibraryPage() {
   const router = useRouter();
 
   const handleDelete = (itemId: string, itemTitle?: string) => {
+    // TODO: Implement actual deletion from backend if files were uploaded to server
+    // For now, it just removes from mockData
     const success = deleteMockContentItem(itemId);
     if (success) {
       toast({
@@ -113,7 +115,15 @@ export default function ContentLibraryPage() {
                     <TableCell>
                       {item.type === 'image' && item.url ? (
                         <div className="w-16 h-10 rounded bg-muted overflow-hidden relative border">
-                           <Image src={item.url} alt={item.title || 'Content preview'} layout="fill" objectFit="cover" data-ai-hint={item.dataAiHint || 'thumbnail'} unoptimized={item.url.startsWith("https://placehold.co")}/>
+                           <Image 
+                             src={item.url} 
+                             alt={item.title || 'Content preview'} 
+                             layout="fill" 
+                             objectFit="cover" 
+                             data-ai-hint={item.dataAiHint || 'thumbnail'} 
+                             unoptimized={item.url.startsWith("https://placehold.co") || item.url.startsWith('blob:')}
+                             onError={(e) => { e.currentTarget.src = "https://placehold.co/64x40/CCCCCC/FFFFFF?text=Error";}} // Basic error placeholder
+                           />
                         </div>
                       ) : (
                         <div className="w-16 h-10 rounded bg-muted flex items-center justify-center border">
@@ -145,7 +155,8 @@ export default function ContentLibraryPage() {
                             <AlertDialogTitle>Are you sure?</AlertDialogTitle>
                             <AlertDialogDescription>
                               This action cannot be undone. This will permanently delete the content item
-                              "{item.title || item.id}" and remove it from all playlists.
+                              "{item.title || item.id}" and remove it from all playlists. 
+                              {item.url.startsWith('/uploads/') && " The uploaded file will remain on the server but will no longer be tracked by the application."}
                             </AlertDialogDescription>
                           </AlertDialogHeader>
                           <AlertDialogFooter>

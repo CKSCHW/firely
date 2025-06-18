@@ -1,3 +1,4 @@
+
 import type { Playlist, DisplayDevice, ContentItem, AvailableContent } from '@/lib/types';
 
 export let availableContentItems: ContentItem[] = [
@@ -11,6 +12,8 @@ export let availableContentItems: ContentItem[] = [
   { id: 'content-8', type: 'video', url: 'https://storage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4', duration: 30, title: 'Big Buck Bunny Promo', dataAiHint: 'animated video' },
   { id: 'content-9', type: 'web', url: 'https://example.com', duration: 20, title: 'Example Company Website', dataAiHint: 'web page' },
   { id: 'content-10', type: 'pdf', url: 'https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf', duration: 15, title: 'Sample PDF Document', dataAiHint: 'document info' },
+  // Example of a locally uploaded item (assuming it was uploaded)
+  // { id: 'content-11', type: 'image', url: '/uploads/your-local-image.png', duration: 10, title: 'Locally Uploaded Image' },
 ];
 
 export let aiAvailableContent: AvailableContent[] = availableContentItems.map(item => ({
@@ -30,7 +33,7 @@ export let mockPlaylists: Playlist[] = [
     id: 'playlist-1',
     name: 'Morning Loop',
     description: 'Content for morning display hours. Includes news and promotions.',
-    items: [availableContentItems[0], availableContentItems[1], availableContentItems[5], availableContentItems[7]].filter(Boolean),
+    items: [availableContentItems[0], availableContentItems[1], availableContentItems[5], availableContentItems[7]].filter(Boolean).map(ci => availableContentItems.find(item => item.id === ci.id) as ContentItem),
     createdAt: new Date(Date.now() - 1000 * 60 * 60 * 48).toISOString(), // 2 days ago
     updatedAt: new Date(Date.now() - 1000 * 60 * 60 * 24).toISOString(), // 1 day ago
   },
@@ -38,7 +41,7 @@ export let mockPlaylists: Playlist[] = [
     id: 'playlist-2',
     name: 'Evening Specials',
     description: 'Promotions and event highlights for the evening.',
-    items: [availableContentItems[2], availableContentItems[3], availableContentItems[4], availableContentItems[6], availableContentItems[9]].filter(Boolean),
+    items: [availableContentItems[2], availableContentItems[3], availableContentItems[4], availableContentItems[6], availableContentItems[9]].filter(Boolean).map(ci => availableContentItems.find(item => item.id === ci.id) as ContentItem),
     createdAt: new Date(Date.now() - 1000 * 60 * 60 * 72).toISOString(), // 3 days ago
     updatedAt: new Date().toISOString(),
   },
@@ -46,7 +49,7 @@ export let mockPlaylists: Playlist[] = [
     id: 'playlist-3',
     name: 'Weekend Showcase',
     description: 'Special content for weekend viewers.',
-    items: [availableContentItems[0], availableContentItems[2], availableContentItems[4], availableContentItems[5], availableContentItems[6], availableContentItems[8]].filter(Boolean),
+    items: [availableContentItems[0], availableContentItems[2], availableContentItems[4], availableContentItems[5], availableContentItems[6], availableContentItems[8]].filter(Boolean).map(ci => availableContentItems.find(item => item.id === ci.id) as ContentItem),
     createdAt: new Date(Date.now() - 1000 * 60 * 60 * 24 * 5).toISOString(), // 5 days ago
     updatedAt: new Date(Date.now() - 1000 * 60 * 60 * 2).toISOString(), // 2 hours ago
   },
@@ -83,7 +86,6 @@ export let mockDevices: DisplayDevice[] = [
   }
 ];
 
-// Function to add a new device to the mock data
 export function addMockDevice(name: string): DisplayDevice {
   const newDevice: DisplayDevice = {
     id: `display-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
@@ -96,7 +98,6 @@ export function addMockDevice(name: string): DisplayDevice {
   return newDevice;
 }
 
-// Function to add a new playlist
 export function addMockPlaylist(name: string, description: string | undefined, itemIds: string[]): Playlist {
   const newPlaylist: Playlist = {
     id: `playlist-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
@@ -110,7 +111,6 @@ export function addMockPlaylist(name: string, description: string | undefined, i
   return newPlaylist;
 }
 
-// Function to update an existing playlist
 export function updateMockPlaylist(id: string, name: string, description: string | undefined, itemIds: string[]): Playlist | undefined {
   const playlistIndex = mockPlaylists.findIndex(p => p.id === id);
   if (playlistIndex === -1) {
@@ -127,7 +127,6 @@ export function updateMockPlaylist(id: string, name: string, description: string
   return updatedPlaylist;
 }
 
-// Function to add a new content item
 export function addMockContentItem(itemData: Omit<ContentItem, 'id'>): ContentItem {
   const newItem: ContentItem = {
     id: `content-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
@@ -138,23 +137,22 @@ export function addMockContentItem(itemData: Omit<ContentItem, 'id'>): ContentIt
   return newItem;
 }
 
-// Function to update an existing content item
 export function updateMockContentItem(id: string, itemData: Partial<Omit<ContentItem, 'id'>>): ContentItem | undefined {
   const itemIndex = availableContentItems.findIndex(item => item.id === id);
   if (itemIndex === -1) {
     return undefined;
   }
-  availableContentItems[itemIndex] = { ...availableContentItems[itemIndex], ...itemData };
+  const updatedItem = { ...availableContentItems[itemIndex], ...itemData };
+  availableContentItems[itemIndex] = updatedItem;
   reSyncAiAvailableContent();
-  // Also update the item if it's present in any playlist's items array
+  
   mockPlaylists = mockPlaylists.map(playlist => ({
     ...playlist,
-    items: playlist.items.map(item => item.id === id ? availableContentItems[itemIndex] : item)
+    items: playlist.items.map(item => item.id === id ? updatedItem : item)
   }));
-  return availableContentItems[itemIndex];
+  return updatedItem;
 }
 
-// Function to delete a content item
 export function deleteMockContentItem(id: string): boolean {
   const itemIndex = availableContentItems.findIndex(item => item.id === id);
   if (itemIndex === -1) {
@@ -162,7 +160,7 @@ export function deleteMockContentItem(id: string): boolean {
   }
   availableContentItems.splice(itemIndex, 1);
   reSyncAiAvailableContent();
-  // Remove the deleted item from all playlists
+  
   mockPlaylists = mockPlaylists.map(playlist => ({
     ...playlist,
     items: playlist.items.filter(item => item.id !== id),

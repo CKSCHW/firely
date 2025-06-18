@@ -20,7 +20,7 @@ export default function CreateContentItemPage() {
              <LibraryBig className="mr-3 h-8 w-8" /> Create New Content Item
           </h1>
           <p className="text-muted-foreground font-body">
-            Add a new image, video, or web link to your library.
+            Add a new image, video, PDF, or web link to your library.
           </p>
         </div>
       </div>
@@ -28,17 +28,12 @@ export default function CreateContentItemPage() {
         <CardHeader>
           <CardTitle className="font-headline">Content Item Details</CardTitle>
           <CardDescription className="font-body">
-            Fill in the information below for your new content item.
+            Fill in the information below for your new content item. Upload files directly.
           </CardDescription>
         </CardHeader>
         <CardContent>
           <ContentItemForm />
-          <div className="mt-8 flex justify-end gap-3 pt-4 border-t">
-            <Button variant="outline" asChild className="font-body">
-              <Link href="/admin/content">Cancel</Link>
-            </Button>
-            <Button type="submit" form="content-item-form" className="font-headline">Save Content Item</Button>
-          </div>
+           {/* Submit buttons are now part of ContentItemForm itself */}
         </CardContent>
       </Card>
     </div>
