@@ -16,9 +16,9 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
-import { addMockDevice } from "@/data/mockData";
 import { useState } from "react";
 import { Loader2 } from "lucide-react";
+import { registerDeviceAction } from "@/app/admin/devices/actions";
 
 const formSchema = z.object({
   deviceName: z.string().min(3, {
@@ -41,21 +41,24 @@ export default function DeviceRegistrationForm() {
   async function onSubmit(values: z.infer<typeof formSchema>) {
     setIsSubmitting(true);
     try {
-      await addMockDevice(values.deviceName);
-      toast({
-        title: "Device Registered",
-        description: `Device "${values.deviceName}" has been successfully registered.`,
-      });
-      router.push("/admin/devices");
-      router.refresh(); 
-    } catch (error) {
-      let message = "Could not register the new device. Please try again.";
-      if (error instanceof Error) {
-        message = error.message;
+      const result = await registerDeviceAction(values);
+      if (result?.success === false) {
+        toast({
+          title: "Registration Failed",
+          description: result.message || "Could not register the new device.",
+          variant: "destructive",
+        });
+      } else {
+        toast({
+          title: "Device Registration Submitted",
+          description: `Device "${values.deviceName}" registration processing.`,
+        });
+        // Redirect is handled by server action
       }
+    } catch (error) {
       toast({
-        title: "Registration Failed",
-        description: message,
+        title: "Registration Error",
+        description: error instanceof Error ? error.message : "An unexpected error occurred.",
         variant: "destructive",
       });
     } finally {

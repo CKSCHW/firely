@@ -19,12 +19,13 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
-import { addMockPlaylist, updateMockPlaylist, mockPlaylists, availableContentItems, ensureDataLoaded } from "@/data/mockData";
+import { mockPlaylists, availableContentItems, ensureDataLoaded } from "@/data/mockData";
 import type { Playlist, ContentItem } from "@/lib/types";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Card, CardContent } from "@/components/ui/card";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { Loader2 } from "lucide-react";
+import { createPlaylistAction, updatePlaylistAction } from "@/app/admin/playlists/actions";
 
 const playlistFormSchema = z.object({
   name: z.string().min(3, {
@@ -63,7 +64,7 @@ export default function PlaylistForm({ playlistId }: PlaylistFormProps) {
   useEffect(() => {
     async function loadInitialData() {
       setIsLoadingData(true);
-      await ensureDataLoaded(); // Ensure all data (content items, playlists) are loaded
+      await ensureDataLoaded();
       setFormContentItems([...availableContentItems]);
 
       if (isEditMode && playlistId) {
@@ -76,7 +77,7 @@ export default function PlaylistForm({ playlistId }: PlaylistFormProps) {
           });
         } else {
            toast({ title: "Error", description: "Playlist not found.", variant: "destructive" });
-           router.push("/admin/playlists");
+           // router.push("/admin/playlists"); // Redirect will be handled by server action logic
         }
       }
       setIsLoadingData(false);
@@ -88,26 +89,30 @@ export default function PlaylistForm({ playlistId }: PlaylistFormProps) {
   async function onSubmit(values: PlaylistFormValues) {
     setIsSubmitting(true);
     try {
+      let result;
       if (isEditMode && playlistId) {
-        await updateMockPlaylist(playlistId, values.name, values.description, values.itemIds);
+        result = await updatePlaylistAction(playlistId, values);
+      } else {
+        result = await createPlaylistAction(values);
+      }
+
+      if (result?.success === false) {
         toast({
-          title: "Playlist Updated",
-          description: `Playlist "${values.name}" has been successfully updated.`,
+          title: isEditMode ? "Update Failed" : "Creation Failed",
+          description: result.message || "An unexpected error occurred.",
+          variant: "destructive",
         });
       } else {
-        await addMockPlaylist(values.name, values.description, values.itemIds);
-        toast({
-          title: "Playlist Created",
-          description: `Playlist "${values.name}" has been successfully created.`,
+         toast({
+          title: isEditMode ? "Playlist Update Submitted" : "Playlist Creation Submitted",
+          description: `Playlist "${values.name}" processing.`,
         });
+        // Redirect is handled by server action
       }
-      router.push("/admin/playlists");
-      router.refresh(); 
     } catch (error) {
-      const message = error instanceof Error ? error.message : "An unexpected error occurred.";
       toast({
-        title: isEditMode ? "Update Failed" : "Creation Failed",
-        description: message,
+        title: isEditMode ? "Update Error" : "Creation Error",
+        description: error instanceof Error ? error.message : "An unexpected error occurred.",
         variant: "destructive",
       });
     } finally {

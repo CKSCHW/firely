@@ -78,15 +78,14 @@ export let aiAvailableContent: AvailableContent[] = [];
 
 let isDataLoaded = false;
 
-// Internal helper to write data, used by readData on initial file creation (SERVER-SIDE ONLY)
 async function writeDataInternal<T>(
     filePath: string,
     data: T[],
-    fsMod: any, // typeof import('fs/promises')
-    pathMod: any, // typeof import('path')
+    fsMod: any, 
+    pathMod: any, 
     dataDir: string
 ): Promise<void> {
-  if (typeof window === 'undefined') { // Server-side only
+  if (typeof window === 'undefined') { 
     try {
       await fsMod.mkdir(dataDir, { recursive: true });
       await fsMod.writeFile(filePath, JSON.stringify(data, null, 2), 'utf-8');
@@ -96,14 +95,11 @@ async function writeDataInternal<T>(
   }
 }
 
-// Helper function to read JSON data from a file (SERVER-SIDE ONLY for FS access)
 async function readData<T>(fileName: string, defaultData: T[] = []): Promise<T[]> {
   if (typeof window !== 'undefined') {
-    // Client-side, return a deep copy of defaultData to prevent shared mutable state
     return JSON.parse(JSON.stringify(defaultData));
   }
 
-  // Server-side execution
   let fsPromises, path;
   try {
     fsPromises = await import('fs/promises');
@@ -115,35 +111,33 @@ async function readData<T>(fileName: string, defaultData: T[] = []): Promise<T[]
       await fsPromises.mkdir(dataDirLocal, { recursive: true });
       const fileContent = await fsPromises.readFile(filePathLocal, 'utf-8');
       const data = JSON.parse(fileContent);
-      // Ensure data is an array and not empty, otherwise use default and write it back
       if (Array.isArray(data) && data.length > 0) {
         return data;
-      } else {
-        // If file is empty or not an array, write defaultData and return it
+      } else if (Array.isArray(data) && data.length === 0 && defaultData.length === 0) {
+        // If file exists and is an empty array, and default is also empty, return empty array.
+        return [];
+      }
+      else {
         await writeDataInternal(filePathLocal, defaultData, fsPromises, path, dataDirLocal);
         return JSON.parse(JSON.stringify(defaultData));
       }
     } catch (error: any) {
-      // If file doesn't exist, create it with defaultData
-      if (error.code === 'ENOENT' && defaultData.length > 0) {
+      if (error.code === 'ENOENT') {
         await writeDataInternal(filePathLocal, defaultData, fsPromises, path, dataDirLocal);
         return JSON.parse(JSON.stringify(defaultData));
       }
-      // For other errors, log and return defaultData
       console.error(`Error reading or processing data from ${fileName} (server-side):`, error);
       return JSON.parse(JSON.stringify(defaultData));
     }
   } catch (e) {
-    // This catch is for errors during dynamic import of 'fs/promises' or 'path'
     console.error(`Failed to import fs/promises or path on server:`, e);
     return JSON.parse(JSON.stringify(defaultData));
   }
 }
 
 
-// Helper function to write JSON data to a file (SERVER-SIDE ONLY for FS access)
 async function writeDataToFile<T>(fileName: string, data: T[]): Promise<void> {
-  if (typeof window === 'undefined') { // Server-side only
+  if (typeof window === 'undefined') { 
     try {
       const fsPromises = await import('fs/promises');
       const path = await import('path');
@@ -152,6 +146,7 @@ async function writeDataToFile<T>(fileName: string, data: T[]): Promise<void> {
       
       await fsPromises.mkdir(dataDirLocal, { recursive: true });
       await fsPromises.writeFile(filePathLocal, JSON.stringify(data, null, 2), 'utf-8');
+      console.log(`Data successfully written to ${filePathLocal}`);
     } catch (error) {
       console.error(`Error writing data to ${fileName} (server-side):`, error);
     }
@@ -168,19 +163,19 @@ function reSyncAiAvailableContent() {
   }));
 }
 
-// Function to load all data
-async function loadAllData() {
-  availableContentItems = await readData<ContentItem>(contentItemsJsonFile, defaultContentItems);
-  mockPlaylists = await readData<Playlist>(playlistsJsonFile, defaultPlaylists);
-  mockDevices = await readData<DisplayDevice>(devicesJsonFile, defaultDevices);
-  
-  reSyncAiAvailableContent();
-  isDataLoaded = true;
-}
-
 export async function ensureDataLoaded() {
   if (!isDataLoaded) {
-    await loadAllData();
+    console.log('Initial data load starting...');
+    availableContentItems = await readData<ContentItem>(contentItemsJsonFile, defaultContentItems);
+    mockPlaylists = await readData<Playlist>(playlistsJsonFile, defaultPlaylists);
+    mockDevices = await readData<DisplayDevice>(devicesJsonFile, defaultDevices);
+    
+    reSyncAiAvailableContent();
+    isDataLoaded = true;
+    console.log('Initial data load complete.');
+    console.log('Loaded devices:', mockDevices.length);
+    console.log('Loaded playlists:', mockPlaylists.length);
+    console.log('Loaded content items:', availableContentItems.length);
   }
 }
 
@@ -205,14 +200,15 @@ export async function updateMockDevice(id: string, updates: Partial<Omit<Display
   await ensureDataLoaded();
   const deviceIndex = mockDevices.findIndex(d => d.id === id);
   if (deviceIndex === -1) {
+    console.error(`Device with id ${id} not found for update.`);
     return undefined;
   }
   
   mockDevices[deviceIndex] = {
     ...mockDevices[deviceIndex],
     name: updates.name ?? mockDevices[deviceIndex].name,
-    currentPlaylistId: updates.currentPlaylistId, // Allows setting to undefined to remove playlist
-    schedule: updates.schedule ?? mockDevices[deviceIndex].schedule, // Update schedule
+    currentPlaylistId: updates.currentPlaylistId, 
+    schedule: updates.schedule ?? mockDevices[deviceIndex].schedule, 
   };
   await writeDataToFile(devicesJsonFile, mockDevices);
   return mockDevices[deviceIndex];
@@ -290,7 +286,9 @@ export async function updateMockContentItem(id: string, itemData: Partial<Omit<C
     items: playlist.items.map(item => item.id === id ? updatedItem : item)
   }));
   await writeDataToFile(contentItemsJsonFile, availableContentItems);
-  await writeDataToFile(playlistsJsonFile, mockPlaylists);
+  // Also write playlists if content items within them were updated (their references might change if not careful)
+  // The current updateMockContentItem correctly updates the items array in mockPlaylists by replacing the item.
+  await writeDataToFile(playlistsJsonFile, mockPlaylists); 
   return updatedItem;
 }
 

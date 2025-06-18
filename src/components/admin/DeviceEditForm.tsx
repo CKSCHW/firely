@@ -2,7 +2,7 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useForm, Controller } from "react-hook-form";
+import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
@@ -20,11 +20,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Checkbox } from "@/components/ui/checkbox";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
-import { updateMockDevice, mockDevices, mockPlaylists, ensureDataLoaded } from "@/data/mockData";
+import { mockDevices, mockPlaylists, ensureDataLoaded } from "@/data/mockData";
 import type { DisplayDevice, Playlist, ScheduleEntry } from "@/lib/types";
 import { useEffect, useState, useCallback } from "react";
 import { Loader2, Trash2, PlusCircle, CalendarClock } from "lucide-react";
 import { v4 as uuidv4 } from 'uuid';
+import { updateDeviceAction } from "@/app/admin/devices/actions";
 
 const NO_PLAYLIST_VALUE = "__NO_PLAYLIST__";
 const DAYS_OF_WEEK = [
@@ -88,14 +89,14 @@ export default function DeviceEditForm({ deviceId }: DeviceEditFormProps) {
           description: "Device not found.",
           variant: "destructive",
         });
-        router.push("/admin/devices");
+        // router.push("/admin/devices"); // Navigation will be handled by server action on failure or success
       }
       setIsLoadingData(false);
     }
     if (deviceId) { 
       loadDeviceData();
     }
-  }, [deviceId, form, router, toast]);
+  }, [deviceId, form, toast, router]);
 
   const handleAddScheduleEntry = useCallback(() => {
     if (!newSchedulePlaylistId || !newScheduleStartTime || !newScheduleEndTime || newScheduleDays.length === 0) {
@@ -119,49 +120,40 @@ export default function DeviceEditForm({ deviceId }: DeviceEditFormProps) {
     setNewScheduleStartTime("");
     setNewScheduleEndTime("");
     setNewScheduleDays([]);
-  }, [newSchedulePlaylistId, newScheduleStartTime, newScheduleEndTime, newScheduleDays, toast, setCurrentSchedule, setNewSchedulePlaylistId, setNewScheduleStartTime, setNewScheduleEndTime, setNewScheduleDays]);
+  }, [newSchedulePlaylistId, newScheduleStartTime, newScheduleEndTime, newScheduleDays, toast]);
 
   const handleRemoveScheduleEntry = useCallback((entryId: string) => {
     setCurrentSchedule(prev => prev.filter(entry => entry.id !== entryId));
-  }, [setCurrentSchedule]);
+  }, []);
 
   const handleDayToggle = useCallback((dayId: number) => {
     setNewScheduleDays(prev => 
       prev.includes(dayId) ? prev.filter(d => d !== dayId) : [...prev, dayId]
     );
-  }, [setNewScheduleDays]);
+  }, []);
 
   async function onSubmit(values: DeviceFormValues) {
     setIsSubmitting(true);
     try {
-      const result = await updateMockDevice(deviceId, {
-        name: values.deviceName,
-        currentPlaylistId: values.currentPlaylistId || undefined, 
-        schedule: currentSchedule, 
-      });
+      const result = await updateDeviceAction(deviceId, values, currentSchedule);
 
-      if (result) {
-        toast({
-          title: "Device Updated",
-          description: `Device "${values.deviceName}" has been successfully updated.`,
-        });
-        router.push("/admin/devices");
-        router.refresh();
-      } else {
+      if (result?.success === false) {
          toast({
           title: "Update Failed",
-          description: "Could not find the device to update.",
+          description: result.message || "Could not update the device.",
           variant: "destructive",
         });
+      } else {
+        toast({ // Toast for success is good, redirect is handled by server action
+          title: "Device Update Submitted",
+          description: `Device "${values.deviceName}" update processing.`,
+        });
+        // Redirect will be handled by the server action
       }
-    } catch (error) {
-      let message = "Could not update the device. Please try again.";
-      if (error instanceof Error) {
-        message = error.message;
-      }
+    } catch (error) { // Catch unexpected errors from calling the action
       toast({
-        title: "Update Failed",
-        description: message,
+        title: "Update Error",
+        description: error instanceof Error ? error.message : "An unexpected error occurred.",
         variant: "destructive",
       });
     } finally {
@@ -250,7 +242,7 @@ export default function DeviceEditForm({ deviceId }: DeviceEditFormProps) {
                           {days}: {entry.startTime} - {entry.endTime}
                         </p>
                       </div>
-                      <Button variant="ghost" size="icon" onClick={() => handleRemoveScheduleEntry(entry.id)} disabled={isSubmitting || isLoadingData}>
+                      <Button variant="ghost" type="button" size="icon" onClick={() => handleRemoveScheduleEntry(entry.id)} disabled={isSubmitting || isLoadingData}>
                         <Trash2 className="h-4 w-4 text-destructive" />
                         <span className="sr-only">Remove schedule item</span>
                       </Button>
