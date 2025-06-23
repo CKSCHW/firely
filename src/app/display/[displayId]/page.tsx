@@ -9,6 +9,7 @@ import { ArrowLeftCircle, ArrowRightCircle, Loader2, AlertTriangle, EyeOff, Tv2,
 import { Button } from '@/components/ui/button';
 import { updateDeviceHeartbeatAction } from '@/app/admin/devices/actions';
 import { useParams } from 'next/navigation';
+import PdfViewer from '@/components/display/PdfViewer';
 
 
 function timeToMinutes(timeStr: string): number { // HH:MM
@@ -252,7 +253,7 @@ export default function DisplayPage() {
   
   if (loading || !displayId) { 
     return (
-      <div className="fixed inset-0 bg-gray-900 flex flex-col items-center justify-center text-slate-200">
+      <div className="fixed inset-0 bg-black flex flex-col items-center justify-center text-slate-200">
         <Loader2 className="w-20 h-20 animate-spin text-accent mb-6" />
         <p className="mt-4 text-3xl font-headline tracking-wide">Lade Display Inhalte für {displayId || '...'} </p>
         <p className="font-body text-slate-400 text-lg">Schwarzmann Screen</p>
@@ -276,7 +277,7 @@ export default function DisplayPage() {
   
   if (!playlist || playlist.items.length === 0) {
      return (
-      <div className="fixed inset-0 bg-gray-800 flex flex-col items-center justify-center text-slate-300 p-8 text-center">
+      <div className="fixed inset-0 bg-black flex flex-col items-center justify-center text-slate-300 p-8 text-center">
         <EyeOff className="w-24 h-24 text-slate-500 mb-6" />
         <p className="mt-4 text-3xl font-headline">Kein Inhalt zum Anzeigen</p>
         <p className="font-body text-slate-400 mt-2 text-lg">Display ID: {displayId}. Keine Playlist aktuell geplant oder die aktive Playlist ist leer.</p>
@@ -291,7 +292,7 @@ export default function DisplayPage() {
   const currentItem = playlist.items[currentItemIndex];
    if (!currentItem) { 
     return (
-      <div className="fixed inset-0 bg-gray-700 flex flex-col items-center justify-center text-yellow-300 p-4 text-center">
+      <div className="fixed inset-0 bg-black flex flex-col items-center justify-center text-yellow-300 p-4 text-center">
         <Loader2 className="w-16 h-16 mb-4 animate-spin" />
         <p className="text-xl">Lade Inhaltsdaten...</p>
       </div>
@@ -348,12 +349,7 @@ export default function DisplayPage() {
         ) : <div className="w-full h-full flex items-center justify-center bg-gray-700 text-white"><FileWarning className="w-12 h-12 mr-2"/>Video-URL fehlt für "{item.title || item.id}"</div>;
       case 'pdf':
          return item.url ? (
-          <embed
-            key={item.id}
-            src={item.url}
-            type="application/pdf"
-            className="w-full h-full animate-fadeIn"
-          />
+           <PdfViewer url={item.url} onError={() => handleContentError(item, 'pdf')} />
         ) : <div className="w-full h-full flex items-center justify-center bg-gray-700 text-white"><FileWarning className="w-12 h-12 mr-2"/>PDF URL fehlt für "{item.title || item.id}"</div>;
       case 'web': 
         return item.url ? (
