@@ -26,9 +26,8 @@ import { UploadCloud, Loader2 } from "lucide-react";
 import { createContentItemAction, updateContentItemAction } from "@/app/admin/content/actions";
 import * as pdfjs from 'pdfjs-dist';
 
-// Use a reliable CDN for the PDF worker script to ensure compatibility and avoid build issues.
-// This points to the legacy build for maximum browser support.
-pdfjs.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjs.version}/pdf.worker.min.js`;
+// Use the official Mozilla-hosted worker script as directed.
+pdfjs.GlobalWorkerOptions.workerSrc = `//mozilla.github.io/pdf.js/build/pdf.worker.mjs`;
 
 
 const contentItemFormSchema = z.object({
