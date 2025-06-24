@@ -1,9 +1,13 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-// Use the Webpack 5 entry point for react-pdf v7
-import { Document, Page } from 'react-pdf/dist/esm/entry.webpack5';
+// Force import from the CJS module to fix Next.js build resolution issues
+import { Document, Page, pdfjs } from 'react-pdf/dist/cjs/entry.js';
 import { Loader2, FileWarning } from 'lucide-react';
+
+// Configure the worker from a stable CDN URL
+pdfjs.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js`;
+
 
 interface PdfViewerProps {
   url: string;
