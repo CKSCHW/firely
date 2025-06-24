@@ -19,22 +19,8 @@ export default function PdfViewer({ url, duration, onError }: PdfViewerProps) {
   const [numPages, setNumPages] = useState<number | null>(null);
   const [pageNumber, setPageNumber] = useState(1);
   const containerRef = useRef<HTMLDivElement>(null);
-  const [containerWidth, setContainerWidth] = useState<number | undefined>();
-
-  useEffect(() => {
-    const handleResize = () => {
-      if (containerRef.current) {
-        setContainerWidth(containerRef.current.offsetWidth);
-      }
-    };
-
-    handleResize();
-    window.addEventListener('resize', handleResize);
-
-    return () => {
-      window.removeEventListener('resize', handleResize);
-    };
-  }, []);
+  
+  // The state and effect for containerWidth have been removed to use a simpler CSS-based approach.
 
   function onDocumentLoadSuccess({ numPages }: { numPages: number }) {
     setNumPages(numPages);
@@ -93,8 +79,7 @@ export default function PdfViewer({ url, duration, onError }: PdfViewerProps) {
         error={errorMessage}
         className="flex justify-center items-center w-full h-full"
       >
-        {containerWidth && (
-          <Page
+        <Page
             key={`page_${pageNumber}`}
             pageNumber={pageNumber}
             renderTextLayer={false}
@@ -104,9 +89,10 @@ export default function PdfViewer({ url, duration, onError }: PdfViewerProps) {
               onError();
             }}
             loading="" // We have a main loader for the document
-            width={containerWidth}
+            // No 'width' prop. Instead, use CSS to ensure the page fits the container.
+            // This is like 'object-fit: contain' for the PDF page.
+            className="max-h-full max-w-full"
           />
-        )}
       </Document>
     </div>
   );
