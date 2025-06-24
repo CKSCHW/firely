@@ -1,15 +1,9 @@
-
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { Document, Page, pdfjs } from 'react-pdf';
-import 'react-pdf/dist/esm/Page/AnnotationLayer.css';
-import 'react-pdf/dist/esm/Page/TextLayer.css';
+// Use the Webpack 5 entry point for react-pdf v7
+import { Document, Page } from 'react-pdf/dist/esm/entry.webpack5';
 import { Loader2, FileWarning } from 'lucide-react';
-
-// Statically configure the worker source to a known compatible version for react-pdf v9.
-// This should be done once at the module level for client components.
-pdfjs.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjs.version}/pdf.worker.min.js`;
 
 interface PdfViewerProps {
   url: string;
@@ -56,7 +50,7 @@ export default function PdfViewer({ url, duration, onError }: PdfViewerProps) {
           return prevPageNumber + 1;
         }
         clearInterval(interval);
-        return prevPageNumber;
+        return prevPageNumber; // Stay on the last page
       });
     }, pageDuration);
 
@@ -86,9 +80,6 @@ export default function PdfViewer({ url, duration, onError }: PdfViewerProps) {
         onLoadSuccess={onDocumentLoadSuccess}
         onLoadError={(error) => {
           console.error(`Error loading PDF document from URL: ${url}. Message:`, error.message);
-           if (error.message.includes('fake worker')) {
-             console.error("This may be due to a network issue, CORS policy, or the browser environment not supporting the worker script.");
-          }
           onError();
         }}
         loading={loadingMessage}
