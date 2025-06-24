@@ -2,12 +2,8 @@
 
 import { useState, useEffect, useRef } from 'react';
 // Force import from the CJS module to fix Next.js build resolution issues
-import { Document, Page, pdfjs } from 'react-pdf/dist/cjs/entry.js';
+import { Document, Page } from 'react-pdf/dist/cjs/entry';
 import { Loader2, FileWarning } from 'lucide-react';
-
-// Configure the worker from a stable CDN URL
-pdfjs.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js`;
-
 
 interface PdfViewerProps {
   url: string;
@@ -46,6 +42,7 @@ export default function PdfViewer({ url, duration, onError }: PdfViewerProps) {
       return;
     }
 
+    // Calculate duration per page, ensuring it's at least 1 second
     const pageDuration = Math.max(1000, (duration * 1000) / numPages);
 
     const interval = setInterval(() => {
@@ -53,8 +50,10 @@ export default function PdfViewer({ url, duration, onError }: PdfViewerProps) {
         if (prevPageNumber < numPages) {
           return prevPageNumber + 1;
         }
+        // When it reaches the last page, it will just stay there until the parent component advances.
+        // The parent component's timer will handle moving to the next content item.
         clearInterval(interval);
-        return prevPageNumber; // Stay on the last page
+        return prevPageNumber;
       });
     }, pageDuration);
 
@@ -75,7 +74,7 @@ export default function PdfViewer({ url, duration, onError }: PdfViewerProps) {
       <p className="text-md max-w-xl break-words">{url}</p>
     </div>
   );
-  
+
   return (
     <div ref={containerRef} className="w-full h-full flex items-center justify-center overflow-hidden bg-white">
       <Document
@@ -100,7 +99,7 @@ export default function PdfViewer({ url, duration, onError }: PdfViewerProps) {
               console.error('Error rendering PDF page');
               onError();
             }}
-            loading=""
+            loading="" // We have a main loader for the document
             width={containerWidth}
           />
         )}
