@@ -22,6 +22,13 @@ const nextConfig: NextConfig = {
       },
     ],
   },
+  webpack: (config, { isServer }) => {
+    // Exclude react-pdf from the server-side bundle
+    if (isServer) {
+      config.externals.push('react-pdf');
+    }
+    return config;
+  },
 };
 
 export default nextConfig;

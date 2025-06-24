@@ -1,10 +1,13 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-// Force import from the CJS module to fix Next.js build resolution issues
-// This avoids ESM/CJS compatibility issues with the Next.js build process.
-import { Document, Page } from 'react-pdf/dist/cjs/entry.js';
+import { Document, Page, pdfjs } from 'react-pdf';
 import { Loader2, FileWarning } from 'lucide-react';
+
+// Configure the worker from a stable CDN URL
+// This is necessary for react-pdf to work in a Next.js environment
+pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.js`;
+
 
 interface PdfViewerProps {
   url: string;
