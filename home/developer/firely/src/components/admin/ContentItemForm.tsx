@@ -24,6 +24,10 @@ import type { ContentItem } from "@/lib/types";
 import { useEffect, useState, useCallback } from "react";
 import { UploadCloud, Loader2 } from "lucide-react";
 import { createContentItemAction, updateContentItemAction } from "@/app/admin/content/actions";
+import * as pdfjs from 'pdfjs-dist';
+
+// Configure the PDF.js worker from a CDN. This is crucial for client-side processing.
+pdfjs.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjs.version}/pdf.worker.min.mjs`;
 
 const contentItemFormSchema = z.object({
   title: z.string().min(3, { message: "Title must be at least 3 characters." }),
@@ -107,62 +111,123 @@ export default function ContentItemForm({ contentId }: ContentItemFormProps) {
     }
   }, [watchedUrl, watchedType]);
 
+  const processPdf = async (file: File) => {
+    setIsProcessing(true);
+    toast({ title: "Processing PDF", description: "Uploading original and converting pages. This might take a moment..." });
+    
+    // Step 1: Upload original PDF to get its URL for storage/reference
+    const pdfFormData = new FormData();
+    pdfFormData.append('file', file);
+    try {
+        const pdfUploadResponse = await fetch('/api/upload', { method: 'POST', body: pdfFormData });
+        const pdfUploadResult = await pdfUploadResponse.json();
+        if (!pdfUploadResult.success) throw new Error(pdfUploadResult.error || 'Failed to upload original PDF.');
+        form.setValue('url', pdfUploadResult.url, { shouldDirty: true });
+        toast({ title: "Original PDF Uploaded", description: "Now converting pages to images..." });
+    } catch(e) {
+        toast({ title: "Error", description: `Failed to upload original PDF: ${e instanceof Error ? e.message : String(e)}`, variant: "destructive" });
+        setIsProcessing(false);
+        setFileInputKey(Date.now());
+        return;
+    }
+
+    // Step 2: Process PDF to images on the client
+    try {
+        const fileReader = new FileReader();
+        fileReader.onload = async (event) => {
+            if (!event.target?.result) {
+                throw new Error("Could not read the PDF file.");
+            }
+            try {
+                const typedarray = new Uint8Array(event.target.result as ArrayBuffer);
+                const pdf = await pdfjs.getDocument(typedarray).promise;
+
+                const pageImageUrls: string[] = [];
+                for (let i = 1; i <= pdf.numPages; i++) {
+                    const page = await pdf.getPage(i);
+                    const viewport = page.getViewport({ scale: 1.5 }); // Use a reasonable scale
+                    const canvas = document.createElement('canvas');
+                    canvas.width = viewport.width;
+                    canvas.height = viewport.height;
+                    const context = canvas.getContext('2d');
+                    if (!context) throw new Error("Could not get canvas context");
+                    
+                    await page.render({ canvasContext: context, viewport: viewport }).promise;
+
+                    const blob = await new Promise<Blob | null>(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.9));
+                    if (!blob) throw new Error(`Failed to create blob for page ${i}`);
+                    
+                    const imageFile = new File([blob], `page_${i}_from_${file.name}.jpg`, { type: 'image/jpeg' });
+                    const imageFormData = new FormData();
+                    imageFormData.append('file', imageFile);
+
+                    const res = await fetch('/api/upload', { method: 'POST', body: imageFormData });
+                    const result = await res.json();
+                    if (!result.success) throw new Error(`Failed to upload page ${i}: ${result.error}`);
+                    pageImageUrls.push(result.url);
+                }
+                form.setValue('pageImageUrls', pageImageUrls, { shouldDirty: true, shouldValidate: true });
+                toast({ title: "Success", description: `PDF processed successfully into ${pageImageUrls.length} pages.` });
+            } catch (e) {
+                 toast({ title: "PDF Conversion Error", description: `An error occurred while converting pages: ${e instanceof Error ? e.message : String(e)}`, variant: "destructive" });
+            } finally {
+                setIsProcessing(false);
+                setFileInputKey(Date.now());
+            }
+        }
+        fileReader.readAsArrayBuffer(file);
+    } catch (e) {
+        toast({ title: "PDF Reading Error", description: e instanceof Error ? e.message : String(e), variant: "destructive" });
+        setIsProcessing(false);
+        setFileInputKey(Date.now());
+    }
+  }
+
+
   const handleFileChange = useCallback(async (event: React.ChangeEvent<HTMLInputElement>) => {
     if (!event.target.files || !event.target.files[0]) return;
     
     const file = event.target.files[0];
+    const currentType = form.getValues("type");
     
-    setIsProcessing(true);
-    toast({ title: "Uploading...", description: `Sending "${file.name}" to the server for processing.` });
-    
-    const formData = new FormData();
-    formData.append('file', file);
-    
-    try {
-        const response = await fetch('/api/upload', { method: 'POST', body: formData });
-        const result = await response.json();
-        
-        if (!result.success) {
-            throw new Error(result.error || 'Upload and processing failed on the server.');
-        }
-
-        form.setValue('url', result.url, { shouldDirty: true, shouldValidate: true });
-        
-        if (result.pageImageUrls && result.pageImageUrls.length > 0) {
-            form.setValue('pageImageUrls', result.pageImageUrls, { shouldDirty: true, shouldValidate: true });
-            toast({ title: "Upload & Processing Successful", description: `PDF processed into ${result.pageImageUrls.length} pages.`});
-        } else if (result.error) {
-             toast({ title: "Upload Successful, but Processing Failed", description: result.error, variant: "destructive"});
-        } else {
+    if (currentType === 'pdf') {
+        await processPdf(file);
+    } else {
+        setIsProcessing(true);
+        toast({ title: "Uploading...", description: `Sending "${file.name}" to the server.` });
+        const formData = new FormData();
+        formData.append('file', file);
+        try {
+            const response = await fetch('/api/upload', { method: 'POST', body: formData });
+            const result = await response.json();
+            if (!result.success) throw new Error(result.error || 'Upload failed');
+            form.setValue('url', result.url, { shouldDirty: true, shouldValidate: true });
+            if (currentType === 'image') {
+              setPreviewUrl(result.url);
+            }
             toast({ title: "Upload Successful", description: `File "${file.name}" uploaded.`});
+        } catch (e) {
+            toast({ title: "Upload Error", description: e instanceof Error ? e.message : String(e), variant: "destructive" });
+        } finally {
+            setIsProcessing(false);
+            setFileInputKey(Date.now());
         }
-        
-        const currentType = form.getValues("type");
-        if (currentType === 'image') {
-          setPreviewUrl(result.url);
-        }
-
-    } catch (e) {
-        toast({ title: "Upload Error", description: e instanceof Error ? e.message : String(e), variant: "destructive" });
-    } finally {
-        setIsProcessing(false);
-        setFileInputKey(Date.now());
     }
   }, [form, toast]);
 
   async function onSubmit(values: ContentItemFormValues) {
-    // Validation: URL is required for non-PDF types if not being processed
-    if (values.type !== 'web' && !values.url) {
-      toast({ title: "Missing File/URL", description: "Please upload a file or provide a URL for web content.", variant: "destructive" });
-      return;
+    if (values.type === 'image' || values.type === 'video') {
+        if (!values.url) {
+            toast({ title: "Missing File", description: "Please upload a file for this content type.", variant: "destructive" });
+            return;
+        }
     }
      if (values.type === 'web' && (!values.url || !values.url.startsWith('http'))) {
       toast({ title: "Invalid URL", description: "Please provide a valid URL for web content.", variant: "destructive" });
       return;
     }
-    // For PDFs, we now expect pageImageUrls from the API
-    if (values.type === 'pdf' && (!values.pageImageUrls || values.pageImageUrls.length === 0)) {
-        toast({ title: "PDF Not Processed", description: "The server failed to process the PDF into images. Please check server logs or try another file.", variant: "destructive" });
+    if (values.type === 'pdf' && (!values.url || !values.pageImageUrls || values.pageImageUrls.length === 0)) {
+        toast({ title: "PDF Not Fully Processed", description: "Please upload a PDF file and wait for it to be converted before saving.", variant: "destructive" });
         return;
     }
     
@@ -186,7 +251,6 @@ export default function ContentItemForm({ contentId }: ContentItemFormProps) {
           title: isEditMode ? "Content Item Updated" : "Content Item Created",
           description: `Content item "${values.title}" has been saved.`,
         });
-         // The server action handles the redirect
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : "An unexpected error occurred.";
@@ -197,7 +261,6 @@ export default function ContentItemForm({ contentId }: ContentItemFormProps) {
       });
     } finally {
       setIsProcessing(false);
-      setFileInputKey(Date.now()); 
     }
   }
   
@@ -250,7 +313,7 @@ export default function ContentItemForm({ contentId }: ContentItemFormProps) {
                 </SelectContent>
               </Select>
               <FormDescription className="font-body">
-                Select the type of content. PDFs will be converted to images on the server upon upload.
+                Select the type of content. PDFs will be converted to images in your browser upon upload.
               </FormDescription>
               <FormMessage />
             </FormItem>
@@ -293,6 +356,7 @@ export default function ContentItemForm({ contentId }: ContentItemFormProps) {
               </FormControl>
                <FormDescription className="font-body">
                 {isEditMode && currentPersistedUrl && <span className="block mt-1">Current file/URL: <a href={currentPersistedUrl} target="_blank" rel="noopener noreferrer" className="underline break-all">{currentPersistedUrl.split('/').pop()}</a>. Uploading a new file will replace it.</span>}
+                {form.watch('pageImageUrls', []).length > 0 && <span className="block mt-1 text-green-600">Successfully processed {form.watch('pageImageUrls', []).length} pages from PDF.</span>}
               </FormDescription>
           </FormItem>
         )}
@@ -316,7 +380,7 @@ export default function ContentItemForm({ contentId }: ContentItemFormProps) {
                 <Input type="number" placeholder="10" {...field} className="font-body" disabled={isProcessing}/>
               </FormControl>
               <FormDescription className="font-body">
-                For PDFs, this is the total time for all pages to display.
+                For PDFs, this is the total time for all pages to display. Each page will get an equal share.
               </FormDescription>
               <FormMessage />
             </FormItem>
@@ -345,7 +409,7 @@ export default function ContentItemForm({ contentId }: ContentItemFormProps) {
             </Button>
             <Button type="submit" form="content-item-form" className="font-headline" disabled={isProcessing || (isLoadingData && isEditMode)}>
               {isProcessing && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              {isProcessing ? 'Saving...' : (isEditMode ? 'Save Changes' : 'Save Content Item')}
+              {isProcessing ? 'Processing...' : (isEditMode ? 'Save Changes' : 'Save Content Item')}
             </Button>
           </div>
       </form>

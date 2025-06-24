@@ -32,7 +32,8 @@ export async function POST(request: NextRequest) {
 
   try {
     await writeFile(filePath, buffer);
-    // Return a single URL for the uploaded file
+    // Return a single URL for the uploaded file.
+    // The client is responsible for any processing and knows what it's uploading.
     return NextResponse.json({ success: true, url: fileUrl });
   } catch (error) {
     console.error('Failed to save file:', error);
