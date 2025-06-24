@@ -7,6 +7,10 @@ import 'react-pdf/dist/esm/Page/AnnotationLayer.css';
 import 'react-pdf/dist/esm/Page/TextLayer.css';
 import { Loader2, FileWarning } from 'lucide-react';
 
+// Statically configure the worker source to a known compatible version for react-pdf v9.
+// This should be done once at the module level for client components.
+pdfjs.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjs.version}/pdf.worker.min.js`;
+
 interface PdfViewerProps {
   url: string;
   duration: number; // Total duration for the whole PDF in seconds
@@ -18,20 +22,6 @@ export default function PdfViewer({ url, duration, onError }: PdfViewerProps) {
   const [pageNumber, setPageNumber] = useState(1);
   const containerRef = useRef<HTMLDivElement>(null);
   const [containerWidth, setContainerWidth] = useState<number | undefined>();
-  const [isWorkerLoaded, setIsWorkerLoaded] = useState(false);
-
-  useEffect(() => {
-    // Configure worker only on the client side inside a useEffect hook.
-    // This prevents server-side rendering errors.
-    try {
-      pdfjs.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjs.version}/pdf.worker.min.js`;
-      setIsWorkerLoaded(true);
-    } catch (error) {
-      console.error("Failed to set PDF worker source:", error);
-      onError();
-    }
-  }, [onError]);
-
 
   useEffect(() => {
     const handleResize = () => {
@@ -88,10 +78,6 @@ export default function PdfViewer({ url, duration, onError }: PdfViewerProps) {
     </div>
   );
   
-  if (!isWorkerLoaded) {
-    return loadingMessage; // Show loading until worker is configured
-  }
-
   return (
     <div ref={containerRef} className="w-full h-full flex items-center justify-center overflow-hidden bg-white">
       <Document
@@ -100,6 +86,9 @@ export default function PdfViewer({ url, duration, onError }: PdfViewerProps) {
         onLoadSuccess={onDocumentLoadSuccess}
         onLoadError={(error) => {
           console.error(`Error loading PDF document from URL: ${url}. Message:`, error.message);
+           if (error.message.includes('fake worker')) {
+             console.error("This may be due to a network issue, CORS policy, or the browser environment not supporting the worker script.");
+          }
           onError();
         }}
         loading={loadingMessage}
