@@ -381,7 +381,7 @@ export default function ContentItemForm({ contentId }: ContentItemFormProps) {
                 <Input type="number" placeholder="10" {...field} className="font-body" disabled={isProcessing}/>
               </FormControl>
               <FormDescription className="font-body">
-                For PDFs, this is the total time for all pages to display. Each page will get an equal share.
+                For PDFs, this is the duration for each individual page. For all other types, it's the total display time.
               </FormDescription>
               <FormMessage />
             </FormItem>
