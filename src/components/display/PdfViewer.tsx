@@ -1,13 +1,12 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
-import { Document, Page, pdfjs } from 'react-pdf';
+import { useState, useEffect } from 'react';
+import Image from 'next/image';
+import { getDocument, GlobalWorkerOptions, type PDFDocumentProxy } from 'pdfjs-dist';
 import { Loader2, FileWarning } from 'lucide-react';
 
-// Configure the worker from a stable CDN URL
-// This is necessary for react-pdf to work in a Next.js environment
-pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.js`;
-
+// The version should ideally match the installed package version.
+GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js`;
 
 interface PdfViewerProps {
   url: string;
@@ -15,85 +14,132 @@ interface PdfViewerProps {
   onError: () => void;
 }
 
-export default function PdfViewer({ url, duration, onError }: PdfViewerProps) {
-  const [numPages, setNumPages] = useState<number | null>(null);
-  const [pageNumber, setPageNumber] = useState(1);
-  const containerRef = useRef<HTMLDivElement>(null);
-  
-  // The state and effect for containerWidth have been removed to use a simpler CSS-based approach.
+const RENDER_SCALE = 2; // Render at a higher resolution for better quality on large screens
 
-  function onDocumentLoadSuccess({ numPages }: { numPages: number }) {
-    setNumPages(numPages);
-    setPageNumber(1); // Start from the first page
-  }
+export default function PdfViewer({ url, duration, onError }: PdfViewerProps) {
+  const [pageImages, setPageImages] = useState<string[]>([]);
+  const [currentPageIndex, setCurrentPageIndex] = useState(0);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!numPages || numPages <= 1) {
-      return;
-    }
+    const convertPdfToImages = async () => {
+      setIsLoading(true);
+      setError(null);
+      setPageImages([]);
 
-    // Calculate duration per page, ensuring it's at least 1 second
-    const pageDuration = Math.max(1000, (duration * 1000) / numPages);
+      try {
+        const loadingTask = getDocument(url);
+        const pdf: PDFDocumentProxy = await loadingTask.promise;
+        
+        const images: string[] = [];
+        // Loop through all pages
+        for (let i = 1; i <= pdf.numPages; i++) {
+          const page = await pdf.getPage(i);
+          const viewport = page.getViewport({ scale: RENDER_SCALE });
+          
+          const canvas = document.createElement('canvas');
+          const context = canvas.getContext('2d');
+
+          if (!context) {
+            throw new Error('Could not get 2D context from canvas');
+          }
+          canvas.height = viewport.height;
+          canvas.width = viewport.width;
+
+          const renderContext = {
+            canvasContext: context,
+            viewport: viewport,
+          };
+
+          await page.render(renderContext).promise;
+          // Using JPEG for smaller file sizes compared to PNG
+          images.push(canvas.toDataURL('image/jpeg', 0.9));
+        }
+        
+        setPageImages(images);
+      } catch (err) {
+        console.error('Error processing PDF:', err);
+        const errorMessage = err instanceof Error ? err.message : 'Failed to load or convert PDF.';
+        setError(errorMessage);
+        onError(); // Notify parent of the error
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    if (url) {
+      convertPdfToImages();
+    } else {
+        setIsLoading(false);
+        setError("No PDF URL provided.");
+        onError();
+    }
+  }, [url, onError]);
+
+  // This effect handles cycling through the generated images
+  useEffect(() => {
+    if (pageImages.length <= 1) return;
+
+    // Calculate duration per page, with a minimum of 1 second
+    const pageDuration = Math.max(1000, (duration * 1000) / pageImages.length);
 
     const interval = setInterval(() => {
-      setPageNumber((prevPageNumber) => {
-        if (prevPageNumber < numPages) {
-          return prevPageNumber + 1;
+      setCurrentPageIndex((prevIndex) => {
+        // Stop at the last page; parent timer will advance to the next content item.
+        if (prevIndex >= pageImages.length - 1) {
+          clearInterval(interval);
+          return prevIndex;
         }
-        // When it reaches the last page, it will just stay there until the parent component advances.
-        // The parent component's timer will handle moving to the next content item.
-        clearInterval(interval);
-        return prevPageNumber;
+        return prevIndex + 1;
       });
     }, pageDuration);
 
     return () => clearInterval(interval);
-  }, [numPages, duration]);
+  }, [pageImages, duration]);
 
-  const loadingMessage = (
-    <div className="w-full h-full flex flex-col items-center justify-center bg-gray-100 text-gray-700 p-4 text-center">
-      <Loader2 className="w-12 h-12 mb-4 animate-spin text-primary" />
-      <p>Lade PDF...</p>
-    </div>
-  );
+  if (isLoading) {
+    return (
+      <div className="w-full h-full flex flex-col items-center justify-center bg-gray-100 text-gray-700 p-4 text-center">
+        <Loader2 className="w-12 h-12 mb-4 animate-spin text-primary" />
+        <p>Converting PDF to images...</p>
+      </div>
+    );
+  }
 
-  const errorMessage = (
-    <div className="w-full h-full flex flex-col items-center justify-center bg-gray-200 text-red-600 p-4 text-center">
-      <FileWarning className="w-16 h-16 mb-4" />
-      <p className="text-xl font-semibold">PDF konnte nicht geladen werden</p>
-      <p className="text-md max-w-xl break-words">{url}</p>
-    </div>
-  );
+  if (error || pageImages.length === 0) {
+    return (
+      <div className="w-full h-full flex flex-col items-center justify-center bg-gray-200 text-red-600 p-4 text-center">
+        <FileWarning className="w-16 h-16 mb-4" />
+        <p className="text-xl font-semibold">Could not display PDF</p>
+        <p className="text-md max-w-xl break-words">{error || `No images were generated from PDF at ${url}`}</p>
+      </div>
+    );
+  }
+  
+  const currentImageSrc = pageImages[currentPageIndex];
 
   return (
-    <div ref={containerRef} className="w-full h-full flex items-center justify-center overflow-hidden bg-white">
-      <Document
-        key={url}
-        file={url}
-        onLoadSuccess={onDocumentLoadSuccess}
-        onLoadError={(error) => {
-          console.error(`Error loading PDF document from URL: ${url}. Message:`, error.message);
-          onError();
-        }}
-        loading={loadingMessage}
-        error={errorMessage}
-        className="flex justify-center items-center w-full h-full"
-      >
-        <Page
-            key={`page_${pageNumber}`}
-            pageNumber={pageNumber}
-            renderTextLayer={false}
-            renderAnnotationLayer={false}
-            onRenderError={() => {
-              console.error('Error rendering PDF page');
-              onError();
-            }}
-            loading="" // We have a main loader for the document
-            // No 'width' prop. Instead, use CSS to ensure the page fits the container.
-            // This is like 'object-fit: contain' for the PDF page.
-            className="max-h-full max-w-full"
+    <div className="w-full h-full flex items-center justify-center overflow-hidden bg-white">
+      {currentImageSrc ? (
+         <Image
+            key={currentPageIndex}
+            src={currentImageSrc}
+            alt={`PDF Page ${currentPageIndex + 1}`}
+            fill={true}
+            style={{ objectFit: "contain" }}
+            quality={90}
+            priority // Prioritize loading the visible image
+            className="animate-fadeIn"
+            unoptimized // Data URIs are not optimized by Next.js image optimizer
           />
-      </Document>
+      ) : (
+        // This case should ideally not be hit if loading/error states are handled correctly
+        <div className="w-full h-full flex flex-col items-center justify-center bg-gray-100 text-gray-700 p-4 text-center">
+          <Loader2 className="w-12 h-12 mb-4 animate-spin text-primary" />
+          <p>Loading page image...</p>
+        </div>
+      )}
     </div>
   );
 }
