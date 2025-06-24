@@ -24,11 +24,11 @@ import type { ContentItem } from "@/lib/types";
 import { useEffect, useState, useCallback } from "react";
 import { UploadCloud, Loader2 } from "lucide-react";
 import { createContentItemAction, updateContentItemAction } from "@/app/admin/content/actions";
-import { pdfjs } from 'react-pdf';
+import * as pdfjs from 'pdfjs-dist';
 
 
 // Configure the PDF.js worker
-pdfjs.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjs.version}/pdf.worker.js`;
+pdfjs.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjs.version}/pdf.worker.min.mjs`;
 
 const contentItemFormSchema = z.object({
   title: z.string().min(3, { message: "Title must be at least 3 characters." }),
