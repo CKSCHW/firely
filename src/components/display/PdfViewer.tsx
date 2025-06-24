@@ -1,15 +1,11 @@
 
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Document, Page, pdfjs } from 'react-pdf';
 import 'react-pdf/dist/esm/Page/AnnotationLayer.css';
 import 'react-pdf/dist/esm/Page/TextLayer.css';
 import { Loader2, FileWarning } from 'lucide-react';
-
-// Configure the worker to ensure it works correctly with Next.js by using a CDN.
-pdfjs.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjs.version}/pdf.worker.min.js`;
-
 
 interface PdfViewerProps {
   url: string;
@@ -20,6 +16,37 @@ interface PdfViewerProps {
 export default function PdfViewer({ url, duration, onError }: PdfViewerProps) {
   const [numPages, setNumPages] = useState<number | null>(null);
   const [pageNumber, setPageNumber] = useState(1);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [containerWidth, setContainerWidth] = useState<number | undefined>();
+  const [isWorkerLoaded, setIsWorkerLoaded] = useState(false);
+
+  useEffect(() => {
+    // Configure worker only on the client side inside a useEffect hook.
+    // This prevents server-side rendering errors.
+    try {
+      pdfjs.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjs.version}/pdf.worker.min.js`;
+      setIsWorkerLoaded(true);
+    } catch (error) {
+      console.error("Failed to set PDF worker source:", error);
+      onError();
+    }
+  }, [onError]);
+
+
+  useEffect(() => {
+    const handleResize = () => {
+      if (containerRef.current) {
+        setContainerWidth(containerRef.current.offsetWidth);
+      }
+    };
+
+    handleResize();
+    window.addEventListener('resize', handleResize);
+
+    return () => {
+      window.removeEventListener('resize', handleResize);
+    };
+  }, []);
 
   function onDocumentLoadSuccess({ numPages }: { numPages: number }) {
     setNumPages(numPages);
@@ -28,10 +55,9 @@ export default function PdfViewer({ url, duration, onError }: PdfViewerProps) {
 
   useEffect(() => {
     if (!numPages || numPages <= 1) {
-      return; // No need to cycle for single-page PDFs or if numPages isn't known yet
+      return;
     }
 
-    // Calculate duration per page in milliseconds. Min of 1s per page.
     const pageDuration = Math.max(1000, (duration * 1000) / numPages);
 
     const interval = setInterval(() => {
@@ -39,16 +65,13 @@ export default function PdfViewer({ url, duration, onError }: PdfViewerProps) {
         if (prevPageNumber < numPages) {
           return prevPageNumber + 1;
         }
-        // When it reaches the last page, it will stay there until the parent component
-        // advances to the next content item.
-        clearInterval(interval); 
+        clearInterval(interval);
         return prevPageNumber;
       });
     }, pageDuration);
 
     return () => clearInterval(interval);
   }, [numPages, duration]);
-
 
   const loadingMessage = (
     <div className="w-full h-full flex flex-col items-center justify-center bg-gray-100 text-gray-700 p-4 text-center">
@@ -65,30 +88,38 @@ export default function PdfViewer({ url, duration, onError }: PdfViewerProps) {
     </div>
   );
   
+  if (!isWorkerLoaded) {
+    return loadingMessage; // Show loading until worker is configured
+  }
+
   return (
-    <div className="w-full h-full flex items-center justify-center overflow-hidden bg-white">
+    <div ref={containerRef} className="w-full h-full flex items-center justify-center overflow-hidden bg-white">
       <Document
         key={url}
         file={url}
         onLoadSuccess={onDocumentLoadSuccess}
         onLoadError={(error) => {
-          console.error('Error loading PDF document:', error.message);
+          console.error(`Error loading PDF document from URL: ${url}. Message:`, error.message);
           onError();
         }}
         loading={loadingMessage}
         error={errorMessage}
         className="flex justify-center items-center w-full h-full"
       >
-        <Page
-          pageNumber={pageNumber}
-          renderTextLayer={false} // Improves performance on dumb displays
-          renderAnnotationLayer={false} // Improves performance
-          onRenderError={() => {
-            console.error('Error rendering PDF page');
-            onError();
-          }}
-          loading="" // Hide the default "Loading page..." text from react-pdf
-        />
+        {containerWidth && (
+          <Page
+            key={`page_${pageNumber}`}
+            pageNumber={pageNumber}
+            renderTextLayer={false}
+            renderAnnotationLayer={false}
+            onRenderError={() => {
+              console.error('Error rendering PDF page');
+              onError();
+            }}
+            loading=""
+            width={containerWidth}
+          />
+        )}
       </Document>
     </div>
   );
