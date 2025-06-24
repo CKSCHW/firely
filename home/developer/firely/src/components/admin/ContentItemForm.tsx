@@ -26,8 +26,13 @@ import { UploadCloud, Loader2 } from "lucide-react";
 import { createContentItemAction, updateContentItemAction } from "@/app/admin/content/actions";
 import * as pdfjs from 'pdfjs-dist';
 
-// Configure the PDF.js worker from a CDN. This is crucial for client-side processing.
-pdfjs.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjs.version}/pdf.worker.min.mjs`;
+// Configure the PDF.js worker to be loaded from the node_modules directory.
+// This is more reliable than a CDN.
+pdfjs.GlobalWorkerOptions.workerSrc = new URL(
+  'pdfjs-dist/build/pdf.worker.min.mjs',
+  import.meta.url,
+).toString();
+
 
 const contentItemFormSchema = z.object({
   title: z.string().min(3, { message: "Title must be at least 3 characters." }),
@@ -416,3 +421,5 @@ export default function ContentItemForm({ contentId }: ContentItemFormProps) {
     </Form>
   );
 }
+
+    
