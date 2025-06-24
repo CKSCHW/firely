@@ -26,10 +26,9 @@ import { UploadCloud, Loader2 } from "lucide-react";
 import { createContentItemAction, updateContentItemAction } from "@/app/admin/content/actions";
 import * as pdfjs from 'pdfjs-dist';
 
-// Configure the PDF.js worker using the unpkg CDN as recommended.
-// This is more reliable than a hardcoded CDN link and avoids 404 errors.
-// Force HTTPS and use the legacy build for maximum compatibility.
-pdfjs.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjs.version}/legacy/build/pdf.worker.min.mjs`;
+// Configure the PDF.js worker using a reliable CDN.
+// This is the most robust cross-environment solution to avoid build and network issues.
+pdfjs.GlobalWorkerOptions.workerSrc = `https://cdn.jsdelivr.net/npm/pdfjs-dist@${pdfjs.version}/legacy/build/pdf.worker.min.mjs`;
 
 
 const contentItemFormSchema = z.object({
@@ -419,3 +418,5 @@ export default function ContentItemForm({ contentId }: ContentItemFormProps) {
     </Form>
   );
 }
+
+    
