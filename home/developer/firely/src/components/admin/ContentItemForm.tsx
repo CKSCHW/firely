@@ -114,41 +114,38 @@ export default function ContentItemForm({ contentId }: ContentItemFormProps) {
 
   const processPdf = async (file: File) => {
     setIsProcessing(true);
-    toast({ title: "Processing PDF", description: "Converting pages to images. This might take a moment..." });
+    toast({ title: "Processing PDF", description: "This might take a moment..." });
     
-    // Step 1: Upload original PDF to get its URL
-    const pdfFormData = new FormData();
-    pdfFormData.append('file', file);
-    let originalPdfUrl = '';
     try {
+        // Step 1: Upload original PDF to get its URL
+        const pdfFormData = new FormData();
+        pdfFormData.append('file', file);
         const pdfUploadResponse = await fetch('/api/upload', { method: 'POST', body: pdfFormData });
         const pdfUploadResult = await pdfUploadResponse.json();
         if (!pdfUploadResult.success) throw new Error(pdfUploadResult.error || 'Failed to upload original PDF.');
-        originalPdfUrl = pdfUploadResult.url;
-        form.setValue('url', originalPdfUrl, { shouldDirty: true });
-    } catch(e) {
-        toast({ title: "Error", description: `Failed to upload original PDF: ${e instanceof Error ? e.message : String(e)}`, variant: "destructive" });
-        setIsProcessing(false);
-        return;
-    }
+        form.setValue('url', pdfUploadResult.url, { shouldDirty: true });
+        toast({ title: "Original PDF Uploaded", description: "Now converting pages to images..."});
 
-
-    // Step 2: Process PDF to images on the client
-    const imageUrls: string[] = [];
-    try {
+        // Step 2: Process PDF to images on the client
         const fileReader = new FileReader();
         fileReader.readAsArrayBuffer(file);
+        
         fileReader.onload = async (event) => {
-            if (!event.target?.result) return;
+            if (!event.target?.result) {
+                throw new Error("Could not read file for PDF processing.");
+            };
+
             const typedarray = new Uint8Array(event.target.result as ArrayBuffer);
             const pdf = await pdfjs.getDocument(typedarray).promise;
+            
+            toast({ title: "Converting Pages", description: `Found ${pdf.numPages} pages. Please wait...`});
 
             const conversionPromises = [];
             for (let i = 1; i <= pdf.numPages; i++) {
                 conversionPromises.push(
                     (async () => {
                         const page = await pdf.getPage(i);
-                        const viewport = page.getViewport({ scale: 2.0 });
+                        const viewport = page.getViewport({ scale: 1.5 });
                         const canvas = document.createElement('canvas');
                         canvas.width = viewport.width;
                         canvas.height = viewport.height;
@@ -176,6 +173,10 @@ export default function ContentItemForm({ contentId }: ContentItemFormProps) {
             toast({ title: "Success", description: `PDF processed into ${urls.length} pages.` });
             setIsProcessing(false);
         }
+        fileReader.onerror = () => {
+             throw new Error("Error reading the PDF file.");
+        }
+
     } catch (e) {
         toast({ title: "PDF Processing Error", description: e instanceof Error ? e.message : String(e), variant: "destructive" });
         setIsProcessing(false);
@@ -219,8 +220,8 @@ export default function ContentItemForm({ contentId }: ContentItemFormProps) {
       toast({ title: "Missing URL", description: "Please upload a file or provide a URL.", variant: "destructive" });
       return;
     }
-    // Validation: pageImageUrls are required for PDF type
-    if (values.type === 'pdf' && (!values.pageImageUrls || values.pageImageUrls.length === 0)) {
+    // Validation: Both original URL and pageImageUrls are required for PDF type
+    if (values.type === 'pdf' && (!values.url || !values.pageImageUrls || values.pageImageUrls.length === 0)) {
         toast({ title: "PDF Not Processed", description: "Please upload a PDF file and wait for it to be converted.", variant: "destructive" });
         return;
     }
@@ -360,7 +361,7 @@ export default function ContentItemForm({ contentId }: ContentItemFormProps) {
           <div className="space-y-2">
             <FormLabel className="font-headline">Image Preview</FormLabel>
             <div className="relative w-full max-w-md h-64 rounded border bg-muted overflow-hidden">
-               <Image src={previewUrl} alt="Content preview" layout="fill" objectFit="contain" unoptimized />
+               <Image src={previewUrl} alt="Content preview" fill={true} style={{objectFit: "contain"}} unoptimized />
             </div>
           </div>
         )}
