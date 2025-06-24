@@ -24,9 +24,7 @@ import type { ContentItem } from "@/lib/types";
 import { useEffect, useState, useCallback } from "react";
 import { UploadCloud, Loader2 } from "lucide-react";
 import { createContentItemAction, updateContentItemAction } from "@/app/admin/content/actions";
-import { pdfjs, Document, Page } from 'react-pdf';
-import 'react-pdf/dist/esm/Page/AnnotationLayer.css';
-import 'react-pdf/dist/esm/Page/TextLayer.css';
+import { pdfjs } from 'react-pdf';
 
 
 // Configure the PDF.js worker
