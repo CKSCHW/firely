@@ -253,10 +253,10 @@ export default function DisplayPage() {
   
   if (loading || !displayId) { 
     return (
-      <div className="fixed inset-0 bg-black flex flex-col items-center justify-center text-slate-200">
+      <div className="fixed inset-0 bg-white flex flex-col items-center justify-center text-slate-800">
         <Loader2 className="w-20 h-20 animate-spin text-accent mb-6" />
         <p className="mt-4 text-3xl font-headline tracking-wide">Lade Display Inhalte für {displayId || '...'} </p>
-        <p className="font-body text-slate-400 text-lg">Schwarzmann Screen</p>
+        <p className="font-body text-slate-600 text-lg">Schwarzmann Screen</p>
       </div>
     );
   }
@@ -277,14 +277,14 @@ export default function DisplayPage() {
   
   if (!playlist || playlist.items.length === 0) {
      return (
-      <div className="fixed inset-0 bg-black flex flex-col items-center justify-center text-slate-300 p-8 text-center">
-        <EyeOff className="w-24 h-24 text-slate-500 mb-6" />
+      <div className="fixed inset-0 bg-white flex flex-col items-center justify-center text-slate-700 p-8 text-center">
+        <EyeOff className="w-24 h-24 text-slate-400 mb-6" />
         <p className="mt-4 text-3xl font-headline">Kein Inhalt zum Anzeigen</p>
-        <p className="font-body text-slate-400 mt-2 text-lg">Display ID: {displayId}. Keine Playlist aktuell geplant oder die aktive Playlist ist leer.</p>
-        <Button onClick={fetchAndSetPlaylist} variant="outline" className="mt-8 text-slate-300 border-slate-500 hover:bg-gray-700 hover:text-slate-100">
+        <p className="font-body text-slate-500 mt-2 text-lg">Display ID: {displayId}. Keine Playlist aktuell geplant oder die aktive Playlist ist leer.</p>
+        <Button onClick={fetchAndSetPlaylist} variant="outline" className="mt-8 text-slate-600 border-slate-400 hover:bg-gray-100 hover:text-slate-800">
           Erneut laden
         </Button>
-        <p className="font-body text-slate-500 text-sm mt-10">Schwarzmann Screen</p>
+        <p className="font-body text-slate-400 text-sm mt-10">Schwarzmann Screen</p>
       </div>
     );
   }
@@ -292,7 +292,7 @@ export default function DisplayPage() {
   const currentItem = playlist.items[currentItemIndex];
    if (!currentItem) { 
     return (
-      <div className="fixed inset-0 bg-black flex flex-col items-center justify-center text-yellow-300 p-4 text-center">
+      <div className="fixed inset-0 bg-white flex flex-col items-center justify-center text-yellow-500 p-4 text-center">
         <Loader2 className="w-16 h-16 mb-4 animate-spin" />
         <p className="text-xl">Lade Inhaltsdaten...</p>
       </div>
@@ -308,7 +308,7 @@ export default function DisplayPage() {
   const renderContentItem = (item: ContentItem) => {
     if (contentError && playlist.items[currentItemIndex]?.id === item.id) { 
       return (
-        <div className="w-full h-full flex flex-col items-center justify-center bg-black text-yellow-400 p-4 text-center">
+        <div className="w-full h-full flex flex-col items-center justify-center bg-gray-200 text-red-600 p-4 text-center">
           <FileWarning className="w-16 h-16 mb-4" />
           <p className="text-xl font-semibold">Inhaltsfehler</p>
           <p className="text-md max-w-xl break-words">{contentError}</p>
@@ -333,7 +333,7 @@ export default function DisplayPage() {
             unoptimized={item.url.startsWith("https://placehold.co") || item.url.startsWith('blob:') || item.url.startsWith('/uploads/')}
             onError={() => handleContentError(item, 'image')}
           />
-        ) : <div className="w-full h-full flex items-center justify-center bg-gray-700 text-white"><FileWarning className="w-12 h-12 mr-2"/>Bild-URL fehlt für "{item.title || item.id}"</div>;
+        ) : <div className="w-full h-full flex items-center justify-center bg-gray-200 text-red-600"><FileWarning className="w-12 h-12 mr-2"/>Bild-URL fehlt für "{item.title || item.id}"</div>;
       case 'video':
         return item.url ? (
           <video
@@ -346,11 +346,11 @@ export default function DisplayPage() {
             onError={() => handleContentError(item, 'video')}
             onCanPlay={() => setContentError(null)} 
           />
-        ) : <div className="w-full h-full flex items-center justify-center bg-gray-700 text-white"><FileWarning className="w-12 h-12 mr-2"/>Video-URL fehlt für "{item.title || item.id}"</div>;
+        ) : <div className="w-full h-full flex items-center justify-center bg-gray-200 text-red-600"><FileWarning className="w-12 h-12 mr-2"/>Video-URL fehlt für "{item.title || item.id}"</div>;
       case 'pdf':
          return item.url ? (
-           <PdfViewer url={item.url} onError={() => handleContentError(item, 'pdf')} />
-        ) : <div className="w-full h-full flex items-center justify-center bg-gray-700 text-white"><FileWarning className="w-12 h-12 mr-2"/>PDF URL fehlt für "{item.title || item.id}"</div>;
+           <PdfViewer url={item.url} duration={item.duration} onError={() => handleContentError(item, 'pdf')} />
+        ) : <div className="w-full h-full flex items-center justify-center bg-gray-200 text-red-600"><FileWarning className="w-12 h-12 mr-2"/>PDF URL fehlt für "{item.title || item.id}"</div>;
       case 'web': 
         return item.url ? (
           <iframe
@@ -362,11 +362,11 @@ export default function DisplayPage() {
             onError={() => handleContentError(item, item.type)}
             onLoad={() => setContentError(null)} 
           />
-        ) : <div className="w-full h-full flex items-center justify-center bg-gray-700 text-white"><FileWarning className="w-12 h-12 mr-2"/>Web-URL fehlt für "{item.title || item.id}"</div>;
+        ) : <div className="w-full h-full flex items-center justify-center bg-gray-200 text-red-600"><FileWarning className="w-12 h-12 mr-2"/>Web-URL fehlt für "{item.title || item.id}"</div>;
       default:
          console.warn(`[Display ${displayId}] Unsupported content type: ${item.type} for item "${item.title || item.id}"`);
         return (
-          <div className="w-full h-full flex flex-col items-center justify-center bg-gray-700 text-yellow-300 p-4 text-center">
+          <div className="w-full h-full flex flex-col items-center justify-center bg-gray-200 text-yellow-600 p-4 text-center">
             <Tv2 className="w-16 h-16 mb-4" />
             <p className="text-xl">Nicht unterstützter Inhaltstyp: {(item as any).type}</p>
             <p>Element: "{item.title || item.id}"</p>
@@ -376,20 +376,20 @@ export default function DisplayPage() {
   };
 
   return (
-    <div className="fixed inset-0 bg-black flex items-center justify-center overflow-hidden select-none group" role="main" aria-label={`Digital Signage Display ${displayId}`}>
+    <div className="fixed inset-0 bg-white flex items-center justify-center overflow-hidden select-none group" role="main" aria-label={`Digital Signage Display ${displayId}`}>
       {renderContentItem(currentItem)}
       
       <button 
         onClick={() => navigate('prev')} 
         aria-label="Vorheriges Element"
-        className="absolute left-2 md:left-4 top-1/2 -translate-y-1/2 z-10 p-2 bg-black/30 text-white/80 rounded-full hover:bg-black/50 hover:text-white transition-all focus:outline-none focus:ring-2 focus:ring-accent focus:ring-opacity-70 opacity-0 group-hover:opacity-100 focus:opacity-100"
+        className="absolute left-2 md:left-4 top-1/2 -translate-y-1/2 z-10 p-2 bg-black/20 text-black/70 rounded-full hover:bg-black/30 hover:text-black transition-all focus:outline-none focus:ring-2 focus:ring-accent focus:ring-opacity-70 opacity-0 group-hover:opacity-100 focus:opacity-100"
       >
         <ArrowLeftCircle size={32} />
       </button>
       <button 
         onClick={() => navigate('next')}
         aria-label="Nächstes Element"
-        className="absolute right-2 md:right-4 top-1/2 -translate-y-1/2 z-10 p-2 bg-black/30 text-white/80 rounded-full hover:bg-black/50 hover:text-white transition-all focus:outline-none focus:ring-2 focus:ring-accent focus:ring-opacity-70 opacity-0 group-hover:opacity-100 focus:opacity-100"
+        className="absolute right-2 md:right-4 top-1/2 -translate-y-1/2 z-10 p-2 bg-black/20 text-black/70 rounded-full hover:bg-black/30 hover:text-black transition-all focus:outline-none focus:ring-2 focus:ring-accent focus:ring-opacity-70 opacity-0 group-hover:opacity-100 focus:opacity-100"
       >
         <ArrowRightCircle size={32} />
       </button>
@@ -397,23 +397,21 @@ export default function DisplayPage() {
       <button
         onClick={toggleFullscreen}
         aria-label={isFullscreen ? "Vollbild Beenden" : "Vollbild Starten"}
-        className="absolute bottom-2 right-2 md:bottom-4 md:right-4 z-10 p-2 bg-black/30 text-white/80 rounded-full hover:bg-black/50 hover:text-white transition-all focus:outline-none focus:ring-2 focus:ring-accent focus:ring-opacity-70 opacity-0 group-hover:opacity-100 focus:opacity-100"
+        className="absolute bottom-2 right-2 md:bottom-4 md:right-4 z-10 p-2 bg-black/20 text-black/70 rounded-full hover:bg-black/30 hover:text-black transition-all focus:outline-none focus:ring-2 focus:ring-accent focus:ring-opacity-70 opacity-0 group-hover:opacity-100 focus:opacity-100"
       >
         {isFullscreen ? <Minimize size={28} /> : <Maximize size={28} />}
       </button>
 
       {currentItem.title && !(contentError && playlist.items[currentItemIndex]?.id === currentItem.id) && (
-        <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/60 via-black/30 to-transparent text-white p-4 md:p-6 z-10 pointer-events-none">
+        <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/50 via-black/20 to-transparent text-white p-4 md:p-6 z-10 pointer-events-none">
           <p className="text-lg md:text-xl font-headline drop-shadow-md">{currentItem.title}</p>
         </div>
       )}
       
       <div className="absolute top-0 left-0 h-1 bg-accent/80 z-20" style={{ width: `${((currentItemIndex + 1) / playlist.items.length) * 100}%`, transition: 'width 0.3s ease-out' }}></div>
-       <div className="absolute top-2 right-3 text-xs text-white/40 font-mono z-20 pointer-events-none">
+       <div className="absolute top-2 right-3 text-xs text-black/40 font-mono z-20 pointer-events-none">
         ID: {displayId}
       </div>
     </div>
   );
 }
-
-    
