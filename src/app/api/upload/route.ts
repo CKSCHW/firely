@@ -65,7 +65,7 @@ export async function POST(request: NextRequest) {
   // --- PDF Processing Logic ---
   try {
     const pdfImageUrls: string[] = [];
-    const loadingTask = getDocument({ data: buffer });
+    const loadingTask = getDocument({ data: new Uint8Array(bytes) });
     const pdf = await loadingTask.promise;
     const canvasFactory = new NodeCanvasFactory();
 
