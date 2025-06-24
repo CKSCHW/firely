@@ -27,7 +27,7 @@ import { createContentItemAction, updateContentItemAction } from "@/app/admin/co
 import * as pdfjs from 'pdfjs-dist';
 
 // Configure the PDF.js worker from a CDN. This is crucial for client-side processing.
-pdfjs.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjs.version}/pdf.worker.min.mjs`;
+pdfjs.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjs.version}/pdf.worker.min.mjs`;
 
 const contentItemFormSchema = z.object({
   title: z.string().min(3, { message: "Title must be at least 3 characters." }),
