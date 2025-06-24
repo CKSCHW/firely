@@ -2,7 +2,8 @@
 
 import { useState, useEffect, useRef } from 'react';
 // Force import from the CJS module to fix Next.js build resolution issues
-import { Document, Page } from 'react-pdf/dist/cjs/entry';
+// This avoids ESM/CJS compatibility issues with the Next.js build process.
+import { Document, Page } from 'react-pdf/dist/cjs/entry.js';
 import { Loader2, FileWarning } from 'lucide-react';
 
 interface PdfViewerProps {

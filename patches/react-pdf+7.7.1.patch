@@ -1,0 +1,13 @@
+diff --git a/node_modules/react-pdf/dist/esm/Page.js b/node_modules/react-pdf/dist/esm/Page.js
+index 9e95328..6134b6b 100644
+--- a/node_modules/react-pdf/dist/esm/Page.js
++++ b/node_modules/react-pdf/dist/esm/Page.js
+@@ -23,7 +23,7 @@ import { PageContext } from './PageContext.js';
+ import Message from './Message.js';
+ import PageSVG from './Page/PageSVG.js';
+ import TextLayer from './Page/TextLayer.js';
+-import AnnotationLayer from './Page/AnnotationLayer.js';
++import AnnotationLayer from './Page/AnnotationLayer.js?js';
+ import { cancelRunningTask, isProvided, makePageCallback } from './shared/utils.js';
+ import useDocumentContext from './shared/hooks/useDocumentContext.js';
+ import useResolver from './shared/hooks/useResolver.js';
