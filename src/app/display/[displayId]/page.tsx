@@ -9,7 +9,12 @@ import { ArrowLeftCircle, ArrowRightCircle, Loader2, AlertTriangle, EyeOff, Tv2,
 import { Button } from '@/components/ui/button';
 import { updateDeviceHeartbeatAction } from '@/app/admin/devices/actions';
 import { useParams } from 'next/navigation';
-import PdfViewer from '@/components/display/PdfViewer';
+import dynamic from 'next/dynamic';
+
+const PdfViewer = dynamic(() => import('@/components/display/PdfViewer'), {
+  ssr: false,
+  loading: () => <div className="w-full h-full flex flex-col items-center justify-center bg-gray-100 text-gray-700 p-4 text-center"><Loader2 className="w-12 h-12 mb-4 animate-spin text-primary" /><p>Loading PDF Viewer...</p></div>,
+});
 
 
 function timeToMinutes(timeStr: string): number { // HH:MM
@@ -135,14 +140,19 @@ export default function DisplayPage() {
   }, []);
 
   useEffect(() => {
-    setIsFullscreen(!!document.fullscreenElement); // Initial check
-    document.addEventListener('fullscreenchange', handleFullscreenChange);
-    return () => {
-      document.removeEventListener('fullscreenchange', handleFullscreenChange);
-    };
+    // Check if running in a browser environment before accessing document
+    if (typeof document !== 'undefined') {
+      setIsFullscreen(!!document.fullscreenElement); // Initial check
+      document.addEventListener('fullscreenchange', handleFullscreenChange);
+      return () => {
+        document.removeEventListener('fullscreenchange', handleFullscreenChange);
+      };
+    }
   }, [handleFullscreenChange]);
 
   const toggleFullscreen = useCallback(async () => {
+     if (typeof document === 'undefined') return;
+
     if (!document.fullscreenElement) {
       try {
         await document.documentElement.requestFullscreen();
@@ -220,7 +230,10 @@ export default function DisplayPage() {
     if (!playlist || playlist.items.length === 0 || isPaused || loading || error || contentError) return;
 
     const currentItem = playlist.items[currentItemIndex];
-    if (!currentItem) return;
+    if (!currentItem) {
+      console.log("[Display] No current item found, skipping timer.");
+      return;
+    }
     
     const duration = (currentItem.duration || 10) * 1000;
     console.log(`[Display ${displayId}] Displaying item "${currentItem.title || currentItem.id}" for ${duration / 1000}s.`);
@@ -231,7 +244,7 @@ export default function DisplayPage() {
 
     return () => {
       clearTimeout(timer);
-      if (currentItem) { 
+       if (currentItem) { 
         console.log(`[Display ${displayId}] Cleared timer for item "${currentItem.title || currentItem.id}".`);
       }
     };
@@ -263,14 +276,14 @@ export default function DisplayPage() {
 
   if (error) {
     return (
-      <div className="fixed inset-0 bg-red-900 flex flex-col items-center justify-center text-red-100 p-8 text-center">
-        <AlertTriangle className="w-24 h-24 text-red-300 mb-6" />
+      <div className="fixed inset-0 bg-red-100 flex flex-col items-center justify-center text-red-900 p-8 text-center">
+        <AlertTriangle className="w-24 h-24 text-red-400 mb-6" />
         <p className="mt-4 text-4xl font-headline">{error}</p>
-        <p className="font-body mt-3 text-lg text-red-200">Display ID: {displayId}. Bitte prüfen Sie die Display-Konfiguration im Admin-Panel oder kontaktieren Sie den Support.</p>
-        <Button onClick={fetchAndSetPlaylist} variant="outline" className="mt-8 text-red-100 border-red-300 hover:bg-red-800 hover:text-red-50">
+        <p className="font-body mt-3 text-lg text-red-700">Display ID: {displayId}. Bitte prüfen Sie die Display-Konfiguration im Admin-Panel oder kontaktieren Sie den Support.</p>
+        <Button onClick={fetchAndSetPlaylist} variant="outline" className="mt-8 text-red-800 border-red-400 hover:bg-red-200 hover:text-red-900">
           Erneut laden
         </Button>
-        <p className="font-body text-red-400 text-sm mt-12">Schwarzmann Screen Fehler</p>
+        <p className="font-body text-red-500 text-sm mt-12">Schwarzmann Screen Fehler</p>
       </div>
     );
   }
@@ -292,8 +305,8 @@ export default function DisplayPage() {
   const currentItem = playlist.items[currentItemIndex];
    if (!currentItem) { 
     return (
-      <div className="fixed inset-0 bg-white flex flex-col items-center justify-center text-yellow-500 p-4 text-center">
-        <Loader2 className="w-16 h-16 mb-4 animate-spin" />
+      <div className="fixed inset-0 bg-white flex flex-col items-center justify-center text-yellow-800 p-4 text-center">
+        <Loader2 className="w-16 h-16 mb-4 animate-spin text-yellow-500" />
         <p className="text-xl">Lade Inhaltsdaten...</p>
       </div>
     );
@@ -366,7 +379,7 @@ export default function DisplayPage() {
       default:
          console.warn(`[Display ${displayId}] Unsupported content type: ${item.type} for item "${item.title || item.id}"`);
         return (
-          <div className="w-full h-full flex flex-col items-center justify-center bg-gray-200 text-yellow-600 p-4 text-center">
+          <div className="w-full h-full flex flex-col items-center justify-center bg-gray-200 text-yellow-800 p-4 text-center">
             <Tv2 className="w-16 h-16 mb-4" />
             <p className="text-xl">Nicht unterstützter Inhaltstyp: {(item as any).type}</p>
             <p>Element: "{item.title || item.id}"</p>
@@ -382,14 +395,14 @@ export default function DisplayPage() {
       <button 
         onClick={() => navigate('prev')} 
         aria-label="Vorheriges Element"
-        className="absolute left-2 md:left-4 top-1/2 -translate-y-1/2 z-10 p-2 bg-black/20 text-black/70 rounded-full hover:bg-black/30 hover:text-black transition-all focus:outline-none focus:ring-2 focus:ring-accent focus:ring-opacity-70 opacity-0 group-hover:opacity-100 focus:opacity-100"
+        className="absolute left-2 md:left-4 top-1/2 -translate-y-1/2 z-10 p-2 bg-black/20 text-white rounded-full hover:bg-black/30 hover:text-white transition-all focus:outline-none focus:ring-2 focus:ring-accent focus:ring-opacity-70 opacity-0 group-hover:opacity-100 focus:opacity-100"
       >
         <ArrowLeftCircle size={32} />
       </button>
       <button 
         onClick={() => navigate('next')}
         aria-label="Nächstes Element"
-        className="absolute right-2 md:right-4 top-1/2 -translate-y-1/2 z-10 p-2 bg-black/20 text-black/70 rounded-full hover:bg-black/30 hover:text-black transition-all focus:outline-none focus:ring-2 focus:ring-accent focus:ring-opacity-70 opacity-0 group-hover:opacity-100 focus:opacity-100"
+        className="absolute right-2 md:right-4 top-1/2 -translate-y-1/2 z-10 p-2 bg-black/20 text-white rounded-full hover:bg-black/30 hover:text-white transition-all focus:outline-none focus:ring-2 focus:ring-accent focus:ring-opacity-70 opacity-0 group-hover:opacity-100 focus:opacity-100"
       >
         <ArrowRightCircle size={32} />
       </button>
@@ -397,7 +410,7 @@ export default function DisplayPage() {
       <button
         onClick={toggleFullscreen}
         aria-label={isFullscreen ? "Vollbild Beenden" : "Vollbild Starten"}
-        className="absolute bottom-2 right-2 md:bottom-4 md:right-4 z-10 p-2 bg-black/20 text-black/70 rounded-full hover:bg-black/30 hover:text-black transition-all focus:outline-none focus:ring-2 focus:ring-accent focus:ring-opacity-70 opacity-0 group-hover:opacity-100 focus:opacity-100"
+        className="absolute bottom-2 right-2 md:bottom-4 md:right-4 z-10 p-2 bg-black/20 text-white rounded-full hover:bg-black/30 hover:text-white transition-all focus:outline-none focus:ring-2 focus:ring-accent focus:ring-opacity-70 opacity-0 group-hover:opacity-100 focus:opacity-100"
       >
         {isFullscreen ? <Minimize size={28} /> : <Maximize size={28} />}
       </button>
