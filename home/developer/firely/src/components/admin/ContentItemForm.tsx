@@ -26,9 +26,9 @@ import { UploadCloud, Loader2 } from "lucide-react";
 import { createContentItemAction, updateContentItemAction } from "@/app/admin/content/actions";
 import * as pdfjs from 'pdfjs-dist';
 
-// Configure the PDF.js worker using a reliable CDN.
-// This is the most robust cross-environment solution to avoid build and network issues.
-pdfjs.GlobalWorkerOptions.workerSrc = `https://cdn.jsdelivr.net/npm/pdfjs-dist@${pdfjs.version}/legacy/build/pdf.worker.min.mjs`;
+// Configure the PDF.js worker to be loaded from the public directory.
+// The file is copied there by a script in `next.config.js`.
+pdfjs.GlobalWorkerOptions.workerSrc = `/pdf.worker.min.mjs`;
 
 
 const contentItemFormSchema = z.object({
