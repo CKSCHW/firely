@@ -35,6 +35,7 @@ const contentItemFormSchema = z.object({
   dataAiHint: z.string().optional().refine(value => !value || value.split(' ').length <= 2, {
     message: "AI hint can have at most two words."
   }),
+  pageImageUrls: z.array(z.string()).optional(),
 });
 
 type ContentItemFormValues = z.infer<typeof contentItemFormSchema>;
@@ -64,6 +65,7 @@ export default function ContentItemForm({ contentId }: ContentItemFormProps) {
       url: "",
       duration: 10,
       dataAiHint: "",
+      pageImageUrls: [],
     },
   });
 
@@ -84,6 +86,7 @@ export default function ContentItemForm({ contentId }: ContentItemFormProps) {
             url: existingContentItem.url, 
             duration: existingContentItem.duration,
             dataAiHint: existingContentItem.dataAiHint || "",
+            pageImageUrls: existingContentItem.pageImageUrls || [],
           });
           setCurrentPersistedUrl(existingContentItem.url);
           if (existingContentItem.type === 'image' && existingContentItem.url) {
@@ -139,75 +142,56 @@ export default function ContentItemForm({ contentId }: ContentItemFormProps) {
     }
   }, [form, isEditMode, currentPersistedUrl]);
 
-  async function onSubmit(values: ContentItemFormValues) { // values.url might be undefined
+  async function onSubmit(values: ContentItemFormValues) {
     setIsProcessing(true);
-    let finalDeterminedUrl = values.url; // Initialize with URL from form field (if any, could be blob)
+    let finalUrl = values.url;
+    let finalPageImageUrls = values.pageImageUrls;
 
-    if (selectedFile && (values.type === 'image' || values.type === 'video' || values.type === 'pdf')) {
-      const formData = new FormData();
-      formData.append('file', selectedFile);
+    if (selectedFile) {
+        const formData = new FormData();
+        formData.append('file', selectedFile);
 
-      try {
-        const response = await fetch('/api/upload', {
-          method: 'POST',
-          body: formData,
-        });
-        const result = await response.json();
+        try {
+            const response = await fetch('/api/upload', {
+                method: 'POST',
+                body: formData,
+            });
+            const result = await response.json();
 
-        if (!response.ok || !result.success) {
-          throw new Error(result.error || 'File upload failed');
+            if (!response.ok || !result.success) {
+                throw new Error(result.error || 'File upload failed');
+            }
+            finalUrl = result.url; // This will be the URL of the uploaded file (image, video, or original PDF)
+            if (result.pageImageUrls) {
+                finalPageImageUrls = result.pageImageUrls;
+            }
+        } catch (error) {
+            const message = error instanceof Error ? error.message : "File upload failed.";
+            toast({
+                title: "Upload Failed",
+                description: message,
+                variant: "destructive",
+            });
+            setIsProcessing(false);
+            return;
         }
-        finalDeterminedUrl = result.url; // URL from successful upload
-      } catch (error) {
-        const message = error instanceof Error ? error.message : "File upload failed.";
+    }
+
+    if (!finalUrl || finalUrl.trim() === '' || finalUrl.startsWith('blob:')) {
         toast({
-          title: "Upload Failed",
-          description: message,
-          variant: "destructive",
+            title: "Missing Content URL",
+            description: "Please upload a file or provide a valid URL.",
+            variant: "destructive",
         });
         setIsProcessing(false);
         return;
-      }
-    }
-
-    // Validate that we have a final URL before proceeding
-    if (!finalDeterminedUrl || finalDeterminedUrl.trim() === '' || finalDeterminedUrl.startsWith('blob:')) {
-      // If finalDeterminedUrl is still a blob URL, it means upload didn't happen for it
-      // or it was a preview that shouldn't be saved.
-      let userMessage = "Content source/URL is required. Please upload a file or provide a valid direct URL.";
-      if (values.type === 'web') {
-        userMessage = "Web content URL is required and must start with http or https.";
-      } else if (finalDeterminedUrl && finalDeterminedUrl.startsWith('blob:')) {
-         userMessage = "File selected for preview, but an error occurred. Please try uploading again or provide a direct URL."
-      }
-      
-      toast({
-        title: "Missing Or Invalid Content URL",
-        description: userMessage,
-        variant: "destructive",
-      });
-      setIsProcessing(false);
-      return;
-    }
-
-    if (values.type === 'web' && !finalDeterminedUrl.startsWith('http')) {
-      toast({
-        title: "Invalid URL Format",
-        description: "Web content URL must start with http or https.",
-        variant: "destructive",
-      });
-      setIsProcessing(false);
-      return;
     }
     
-    // Server action expects a string URL.
     const actionValues = { 
-        title: values.title,
-        type: values.type,
-        url: finalDeterminedUrl, // This is now guaranteed to be a non-empty string
-        duration: values.duration,
-        dataAiHint: values.dataAiHint
-     };
+        ...values,
+        url: finalUrl,
+        pageImageUrls: finalPageImageUrls,
+    };
 
     try {
       let actionResult;
@@ -334,7 +318,7 @@ export default function ContentItemForm({ contentId }: ContentItemFormProps) {
                 </SelectContent>
               </Select>
               <FormDescription className="font-body">
-                Select the type of content you are adding.
+                Select the type of content you are adding. PDFs will be converted to images on upload.
               </FormDescription>
               <FormMessage />
             </FormItem>
@@ -378,7 +362,7 @@ export default function ContentItemForm({ contentId }: ContentItemFormProps) {
                     <Input placeholder="https://example.com/image.jpg or /uploads/file.jpg" {...field} className="font-body" disabled={isProcessing || !!selectedFile}/>
                   </FormControl>
                   <FormDescription className="font-body">
-                    Direct URL to the content. If you upload a file above, this field will be ignored (or can be left blank).
+                    Direct URL to the content. If you upload a file above, this field will be ignored (or can be left blank). Not applicable for PDFs which must be uploaded.
                   </FormDescription>
                   <FormMessage />
                 </FormItem>
@@ -424,7 +408,7 @@ export default function ContentItemForm({ contentId }: ContentItemFormProps) {
                 <Input type="number" placeholder="10" {...field} className="font-body" disabled={isProcessing}/>
               </FormControl>
               <FormDescription className="font-body">
-                How long this item should be displayed in a playlist.
+                How long this item should be displayed in a playlist. For PDFs, this is the total time for all pages.
               </FormDescription>
               <FormMessage />
             </FormItem>
@@ -460,4 +444,3 @@ export default function ContentItemForm({ contentId }: ContentItemFormProps) {
     </Form>
   );
 }
-

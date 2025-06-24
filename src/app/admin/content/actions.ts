@@ -16,6 +16,7 @@ const contentItemFormSchema = z.object({
   dataAiHint: z.string().optional().refine(value => !value || value.split(' ').length <= 2, {
     message: "AI hint can have at most two words."
   }),
+  pageImageUrls: z.array(z.string()).optional(),
 });
 
 type ContentItemFormValues = z.infer<typeof contentItemFormSchema>;
@@ -28,6 +29,7 @@ export async function createContentItemAction(values: ContentItemFormValues) {
         url: values.url,
         duration: values.duration,
         dataAiHint: values.dataAiHint || undefined,
+        pageImageUrls: values.pageImageUrls,
     };
     await addMockContentItem(contentData);
   } catch (error) {
@@ -46,6 +48,7 @@ export async function updateContentItemAction(contentId: string, values: Content
         url: values.url,
         duration: values.duration,
         dataAiHint: values.dataAiHint || undefined,
+        pageImageUrls: values.pageImageUrls,
     };
     const result = await updateMockContentItem(contentId, contentData);
     if (!result) {

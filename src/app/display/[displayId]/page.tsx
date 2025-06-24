@@ -361,9 +361,12 @@ export default function DisplayPage() {
           />
         ) : <div className="w-full h-full flex items-center justify-center bg-gray-200 text-red-600"><FileWarning className="w-12 h-12 mr-2"/>Video-URL fehlt für "{item.title || item.id}"</div>;
       case 'pdf':
-         return item.url ? (
-           <PdfViewer url={item.url} duration={item.duration} onError={() => handleContentError(item, 'pdf')} />
-        ) : <div className="w-full h-full flex items-center justify-center bg-gray-200 text-red-600"><FileWarning className="w-12 h-12 mr-2"/>PDF URL fehlt für "{item.title || item.id}"</div>;
+         return item.pageImageUrls && item.pageImageUrls.length > 0 ? (
+           <PdfViewer 
+              pageImageUrls={item.pageImageUrls} 
+              duration={item.duration} 
+              onError={() => handleContentError(item, 'pdf')} />
+        ) : <div className="w-full h-full flex items-center justify-center bg-gray-200 text-red-600 p-4 text-center"><FileWarning className="w-12 h-12 mr-2"/>PDF konnte nicht angezeigt werden. Bitte laden Sie die Datei erneut hoch.</div>;
       case 'web': 
         return item.url ? (
           <iframe

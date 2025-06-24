@@ -1,3 +1,4 @@
+
 export interface ContentItem {
   id: string;
   type: 'image' | 'video' | 'web' | 'pdf';
@@ -5,6 +6,7 @@ export interface ContentItem {
   duration: number; // in seconds
   title?: string;
   dataAiHint?: string; // For placeholder images on Unsplash
+  pageImageUrls?: string[]; // For converted PDF pages
 }
 
 export interface ScheduleEntry {
