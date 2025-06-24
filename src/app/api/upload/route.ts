@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { writeFile, mkdir } from 'fs/promises';
 import path from 'path';
 import { v4 as uuidv4 } from 'uuid';
-import { getDocument } from 'pdfjs-dist/legacy/build/pdf.js';
+import * as pdfjs from 'pdfjs-dist/legacy/build/pdf.js';
 import { createCanvas, type Canvas } from 'canvas';
 
 // Node.js canvas is not a full browser environment canvas, so we need a factory.
@@ -65,7 +65,7 @@ export async function POST(request: NextRequest) {
   // --- PDF Processing Logic ---
   try {
     const pdfImageUrls: string[] = [];
-    const loadingTask = getDocument({ data: new Uint8Array(bytes) });
+    const loadingTask = pdfjs.getDocument({ data: new Uint8Array(bytes) });
     const pdf = await loadingTask.promise;
     const canvasFactory = new NodeCanvasFactory();
 
