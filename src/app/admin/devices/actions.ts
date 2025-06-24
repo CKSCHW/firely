@@ -86,11 +86,8 @@ export async function updateDeviceHeartbeatAction(deviceId: string) {
     return { success: false, message: 'Device ID is required for heartbeat.' };
   }
   try {
-    const result = await updateMockDeviceHeartbeat(deviceId);
-    if (!result) {
-      return { success: false, message: 'Device not found or heartbeat update failed.' };
-    }
-    return { success: true };
+    await updateMockDeviceHeartbeat(deviceId); // This will throw if it fails
+    return { success: true }; // If it doesn't throw, it succeeded.
   } catch (error) {
     console.error(`Server Action: Error processing heartbeat for device ${deviceId}:`, error);
     return { success: false, message: error instanceof Error ? error.message : 'Heartbeat processing failed.' };

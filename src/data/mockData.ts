@@ -2,7 +2,7 @@
 import type { Playlist, DisplayDevice, ContentItem, AvailableContent, ScheduleEntry } from '@/lib/types';
 import { v4 as uuidv4 } from 'uuid';
 import { db, isFirebaseConfigured } from '@/lib/firebase'; 
-import { collection, doc, setDoc, getDoc, getDocs, deleteDoc, writeBatch, query, updateDoc } from 'firebase/firestore';
+import { collection, doc, setDoc, getDoc, getDocs, deleteDoc, writeBatch, query, updateDoc, deleteField } from 'firebase/firestore';
 
 // Helper function to remove properties with undefined values
 function removeUndefinedProps(obj: any): any {
@@ -223,7 +223,6 @@ export async function addMockDevice(deviceId: string, name: string): Promise<{ s
     status: 'online' as 'online' | 'offline',
     lastSeen: currentTime,
     schedule: [] as ScheduleEntry[],
-    // currentPlaylistId is INTENTIONALLY OMITTED HERE
   };
 
   if (isFirebaseConfigured && db) {
@@ -236,7 +235,6 @@ export async function addMockDevice(deviceId: string, name: string): Promise<{ s
       await setDoc(deviceDocRef, removeUndefinedProps(firestoreData));
     } catch (dbError) {
       console.error("Error adding device to Firestore (within addMockDevice): ", dbError);
-      // Throw the error to be caught by the server action
       throw new Error(`Firestore operation failed: ${dbError instanceof Error ? dbError.message : String(dbError)}`);
     }
   }
@@ -247,7 +245,6 @@ export async function addMockDevice(deviceId: string, name: string): Promise<{ s
     status: 'online',
     lastSeen: currentTime,
     schedule: [],
-    // currentPlaylistId is not set for new devices in memory either.
   };
   const existingInMemoryDeviceIndex = mockDevices.findIndex(d => d.id === deviceId);
   if (existingInMemoryDeviceIndex > -1) {
@@ -305,62 +302,33 @@ export async function updateMockDevice(deviceId: string, updates: Partial<Omit<D
   return updatedDeviceInMemory;
 }
 
-// Re-import deleteField from 'firebase/firestore' if it was removed or use it correctly.
-// Assuming it's available or needs to be added to imports if not already.
-import { deleteField } from 'firebase/firestore';
 
-
-export async function updateMockDeviceHeartbeat(deviceId: string): Promise<DisplayDevice | undefined> {
-  await ensureDataLoaded();
-  const deviceIndex = mockDevices.findIndex(d => d.id === deviceId);
-
-  if (deviceIndex === -1) {
-    console.warn(`[mockData] Device ${deviceId} not found in memory for heartbeat.`);
-    if (isFirebaseConfigured && db) {
-        const deviceRef = doc(db, 'devices', deviceId);
-        const deviceSnap = await getDoc(deviceRef);
-        if (!deviceSnap.exists()) {
-            console.error(`[mockData] Device ${deviceId} not found in Firestore for heartbeat.`);
-            return undefined;
-        }
-    } else {
-        return undefined;
+export async function updateMockDeviceHeartbeat(deviceId: string): Promise<void> {
+  if (!isFirebaseConfigured || !db) {
+    console.warn(`[mockData] Heartbeat for ${deviceId} skipped; Firebase not configured.`);
+    // For local dev without Firestore, we can try to update the in-memory array.
+    // This is not a reliable solution for multi-instance servers but helps local testing.
+    const deviceIndex = mockDevices.findIndex(d => d.id === deviceId);
+    if (deviceIndex !== -1) {
+        mockDevices[deviceIndex].lastSeen = new Date().toISOString();
+        mockDevices[deviceIndex].status = 'online';
     }
+    return;
   }
 
-  const newLastSeen = new Date().toISOString();
-  const newStatus = 'online';
-
-  if (isFirebaseConfigured && db) {
-    try {
-      const deviceRef = doc(db, 'devices', deviceId);
-      await updateDoc(deviceRef, {
-        lastSeen: newLastSeen,
-        status: newStatus,
-      });
-    } catch (error) {
-      console.error(`[mockData] Error updating heartbeat in Firestore for ${deviceId}:`, error);
-    }
+  // This is the main path for when Firestore is configured.
+  try {
+    const deviceRef = doc(db, 'devices', deviceId);
+    // updateDoc will fail if the document doesn't exist, which is the desired behavior.
+    await updateDoc(deviceRef, {
+      lastSeen: new Date().toISOString(),
+      status: 'online',
+    });
+  } catch (error) {
+    console.error(`[mockData] Error updating heartbeat in Firestore for ${deviceId}:`, error);
+    // Rethrow the error to be handled by the calling server action
+    throw new Error(`Failed to update heartbeat for device ${deviceId}: ${error instanceof Error ? error.message : String(error)}`);
   }
-
-  if (deviceIndex !== -1) {
-    mockDevices[deviceIndex] = {
-      ...mockDevices[deviceIndex],
-      lastSeen: newLastSeen,
-      status: newStatus,
-    };
-    return mockDevices[deviceIndex];
-  } else if (isFirebaseConfigured && db) { 
-     const deviceSnap = await getDoc(doc(db, 'devices', deviceId));
-     if (deviceSnap.exists()) {
-        const updatedDeviceFromDb = { ...deviceSnap.data(), id: deviceId } as DisplayDevice;
-        const existingIdx = mockDevices.findIndex(d => d.id === deviceId);
-        if (existingIdx > -1) mockDevices[existingIdx] = updatedDeviceFromDb;
-        else mockDevices.push(updatedDeviceFromDb);
-        return updatedDeviceFromDb;
-     }
-  }
-  return undefined;
 }
 
 
