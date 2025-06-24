@@ -28,7 +28,8 @@ import * as pdfjs from 'pdfjs-dist';
 
 // Configure the PDF.js worker using the unpkg CDN as recommended.
 // This is more reliable than a hardcoded CDN link and avoids 404 errors.
-pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
+// Force HTTPS to avoid mixed content errors.
+pdfjs.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
 
 
 const contentItemFormSchema = z.object({
@@ -419,5 +420,4 @@ export default function ContentItemForm({ contentId }: ContentItemFormProps) {
   );
 }
 
-    
     
