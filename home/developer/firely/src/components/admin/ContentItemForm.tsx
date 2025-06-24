@@ -26,9 +26,9 @@ import { UploadCloud, Loader2 } from "lucide-react";
 import { createContentItemAction, updateContentItemAction } from "@/app/admin/content/actions";
 import * as pdfjs from 'pdfjs-dist';
 
-// Configure the PDF.js worker to be loaded from the public directory.
-// The file is copied there by a script in `next.config.js`.
-pdfjs.GlobalWorkerOptions.workerSrc = `/pdf.worker.min.mjs`;
+// Use a reliable CDN for the PDF worker script to ensure compatibility and avoid build issues.
+// This points to the legacy build for maximum browser support.
+pdfjs.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjs.version}/pdf.worker.min.js`;
 
 
 const contentItemFormSchema = z.object({
@@ -418,5 +418,3 @@ export default function ContentItemForm({ contentId }: ContentItemFormProps) {
     </Form>
   );
 }
-
-    
