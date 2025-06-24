@@ -68,6 +68,7 @@ export default function PdfViewer({ url, duration, onError }: PdfViewerProps) {
   return (
     <div className="w-full h-full flex items-center justify-center overflow-hidden bg-white">
       <Document
+        key={url}
         file={url}
         onLoadSuccess={onDocumentLoadSuccess}
         onLoadError={(error) => {
@@ -82,8 +83,6 @@ export default function PdfViewer({ url, duration, onError }: PdfViewerProps) {
           pageNumber={pageNumber}
           renderTextLayer={false} // Improves performance on dumb displays
           renderAnnotationLayer={false} // Improves performance
-          className="flex justify-center items-center"
-          canvasClassName="max-w-full max-h-full object-contain"
           onRenderError={() => {
             console.error('Error rendering PDF page');
             onError();
