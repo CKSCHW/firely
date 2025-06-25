@@ -16,7 +16,7 @@ export default function PdfViewer({ pageImageUrls, duration, onError }: PdfViewe
   const [loadedImages, setLoadedImages] = useState<Record<string, boolean>>({});
 
   const numPages = pageImageUrls?.length || 0;
-  // The duration prop is now per page.
+  // The duration prop is now correctly used as the time for each page.
   const pageDuration = Math.max(1000, duration * 1000);
 
   // Preload images
