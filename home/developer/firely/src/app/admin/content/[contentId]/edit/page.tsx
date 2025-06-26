@@ -1,43 +1,18 @@
 
-"use client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
-import { ArrowLeft, LibraryBig, Loader2 } from "lucide-react";
+import { ArrowLeft, LibraryBig } from "lucide-react";
 import ContentItemForm from "@/components/admin/ContentItemForm";
 import { getContentItem } from "@/data/mockData";
-import { useParams } from 'next/navigation';
-import { useEffect, useState } from "react";
 import type { ContentItem } from "@/lib/types";
 
-export default function EditContentItemPage() {
-  const paramsHook = useParams<{ contentId: string }>();
-  const contentId = paramsHook.contentId;
+// This is now a Server Component
+export default async function EditContentItemPage({ params }: { params: { contentId: string } }) {
+  const contentId = params.contentId;
+  const contentItem = await getContentItem(contentId);
 
-  const [contentItem, setContentItem] = useState<ContentItem | null | undefined>(undefined);
-  const [isLoading, setIsLoading] = useState(true);
-
-  useEffect(() => {
-    async function loadContentItem() {
-      setIsLoading(true);
-      if (contentId) {
-        const foundItem = await getContentItem(contentId);
-        setContentItem(foundItem || null);
-      }
-      setIsLoading(false);
-    }
-    loadContentItem();
-  }, [contentId]);
-
-  if (isLoading || contentItem === undefined) {
-    return (
-      <div className="flex justify-center items-center min-h-[calc(100vh-200px)]">
-        <Loader2 className="h-12 w-12 animate-spin text-primary" />
-      </div>
-    );
-  }
-  
-  if (contentItem === null) {
+  if (!contentItem) {
     return (
       <div className="space-y-6">
         <div className="flex items-center gap-4">
@@ -92,7 +67,7 @@ export default function EditContentItemPage() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <ContentItemForm contentId={contentId} />
+          <ContentItemForm initialData={contentItem} />
         </CardContent>
       </Card>
     </div>

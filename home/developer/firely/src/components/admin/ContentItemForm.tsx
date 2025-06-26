@@ -19,7 +19,6 @@ import {
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { getContentItem } from "@/data/mockData";
 import type { ContentItem } from "@/lib/types";
 import { useEffect, useState, useCallback } from "react";
 import { UploadCloud, Loader2 } from "lucide-react";
@@ -46,24 +45,31 @@ const contentItemFormSchema = z.object({
 type ContentItemFormValues = z.infer<typeof contentItemFormSchema>;
 
 interface ContentItemFormProps {
-  contentId?: string;
+  initialData?: ContentItem;
 }
 
-export default function ContentItemForm({ contentId }: ContentItemFormProps) {
+export default function ContentItemForm({ initialData }: ContentItemFormProps) {
   const router = useRouter();
   const { toast } = useToast();
-  const isEditMode = !!contentId;
+  const isEditMode = !!initialData;
+  const contentId = initialData?.id;
 
   const [previewUrl, setPreviewUrl] = useState<string | undefined>();
   const [isProcessing, setIsProcessing] = useState(false);
-  const [isLoadingData, setIsLoadingData] = useState(true);
   const [currentPersistedUrl, setCurrentPersistedUrl] = useState<string | undefined>();
   const [fileInputKey, setFileInputKey] = useState(Date.now());
 
 
   const form = useForm<ContentItemFormValues>({
     resolver: zodResolver(contentItemFormSchema),
-    defaultValues: {
+    defaultValues: isEditMode ? {
+      title: initialData.title || "",
+      type: initialData.type,
+      url: initialData.url, 
+      duration: initialData.duration,
+      dataAiHint: initialData.dataAiHint || "",
+      pageImageUrls: initialData.pageImageUrls || [],
+    } : {
       title: "",
       type: "image",
       url: "",
@@ -73,40 +79,18 @@ export default function ContentItemForm({ contentId }: ContentItemFormProps) {
     },
   });
 
+  useEffect(() => {
+    if(isEditMode && initialData) {
+        setCurrentPersistedUrl(initialData.url);
+        if (initialData.type === 'image' && initialData.url) {
+          setPreviewUrl(initialData.url);
+        }
+    }
+  }, [initialData, isEditMode]);
+
+
   const watchedUrl = form.watch("url");
   const watchedType = form.watch("type");
-
-  useEffect(() => {
-    async function loadInitialData() {
-      setIsLoadingData(true);
-      if (isEditMode && contentId) {
-        try {
-          const existingContentItem = await getContentItem(contentId);
-          if (existingContentItem) {
-            form.reset({
-              title: existingContentItem.title || "",
-              type: existingContentItem.type,
-              url: existingContentItem.url, 
-              duration: existingContentItem.duration,
-              dataAiHint: existingContentItem.dataAiHint || "",
-              pageImageUrls: existingContentItem.pageImageUrls || [],
-            });
-            setCurrentPersistedUrl(existingContentItem.url);
-            if (existingContentItem.type === 'image' && existingContentItem.url) {
-              setPreviewUrl(existingContentItem.url);
-            }
-          } else {
-            toast({ title: "Error", description: "Content item not found.", variant: "destructive" });
-          }
-        } catch (error) {
-          toast({ title: "Error", description: "Failed to load content item data.", variant: "destructive" });
-        }
-      }
-      setIsLoadingData(false);
-    }
-    loadInitialData();
-  }, [isEditMode, contentId, form, toast]);
-
 
   useEffect(() => {
     if (watchedType === "image" && watchedUrl && (watchedUrl.startsWith('blob:') || watchedUrl.startsWith('/') || watchedUrl.startsWith('http'))) {
@@ -220,14 +204,6 @@ export default function ContentItemForm({ contentId }: ContentItemFormProps) {
     }
   }
   
-  if (isLoadingData && isEditMode) {
-    return (
-      <div className="flex justify-center items-center py-10">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
-      </div>
-    );
-  }
-
   return (
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8" id="content-item-form">
@@ -363,7 +339,7 @@ export default function ContentItemForm({ contentId }: ContentItemFormProps) {
             <Button variant="outline" type="button" onClick={() => router.push('/admin/content')} className="font-body" disabled={isProcessing}>
               Cancel
             </Button>
-            <Button type="submit" form="content-item-form" className="font-headline" disabled={isProcessing || (isLoadingData && isEditMode)}>
+            <Button type="submit" form="content-item-form" className="font-headline" disabled={isProcessing || (isEditMode && !initialData)}>
               {isProcessing && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               {isProcessing ? 'Processing...' : (isEditMode ? 'Save Changes' : 'Save Content Item')}
             </Button>
