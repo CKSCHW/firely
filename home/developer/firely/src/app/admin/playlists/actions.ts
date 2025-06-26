@@ -2,7 +2,7 @@
 'use server';
 
 import { z } from 'zod';
-import { addMockPlaylist, updateMockPlaylist, deleteMockPlaylist } from '@/data/mockData';
+import { addPlaylist, updatePlaylist, deletePlaylist } from '@/data/mockData';
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 
@@ -20,7 +20,7 @@ type PlaylistFormValues = z.infer<typeof playlistFormSchema>;
 
 export async function createPlaylistAction(values: PlaylistFormValues) {
   try {
-    await addMockPlaylist(values.name, values.description, values.itemIds);
+    await addPlaylist(values.name, values.description, values.itemIds);
   } catch (error) {
     console.error("Error creating playlist action:", error);
     return { success: false, message: error instanceof Error ? error.message : 'Playlist creation failed.' };
@@ -31,7 +31,7 @@ export async function createPlaylistAction(values: PlaylistFormValues) {
 
 export async function updatePlaylistAction(playlistId: string, values: PlaylistFormValues) {
   try {
-    const result = await updateMockPlaylist(playlistId, values.name, values.description, values.itemIds);
+    const result = await updatePlaylist(playlistId, values.name, values.description, values.itemIds);
     if (!result) {
       return { success: false, message: 'Playlist not found or update failed.' };
     }
@@ -46,7 +46,7 @@ export async function updatePlaylistAction(playlistId: string, values: PlaylistF
 
 export async function deletePlaylistAction(playlistId: string) {
   try {
-    const success = await deleteMockPlaylist(playlistId);
+    const success = await deletePlaylist(playlistId);
     if (!success) {
       return { success: false, message: 'Playlist not found or deletion failed.' };
     }

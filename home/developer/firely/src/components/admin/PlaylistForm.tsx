@@ -18,11 +18,11 @@ import {
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
-import { mockPlaylists, availableContentItems, ensureDataLoaded } from "@/data/mockData";
+import { getPlaylist, getContentItems } from "@/data/mockData";
 import type { Playlist, ContentItem } from "@/lib/types";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState, useMemo, useCallback } from "react";
 import { Loader2, ArrowUp, ArrowDown, PlusCircle, X } from "lucide-react";
 import { createPlaylistAction, updatePlaylistAction } from "@/app/admin/playlists/actions";
 
@@ -69,23 +69,28 @@ export default function PlaylistForm({ playlistId }: PlaylistFormProps) {
   useEffect(() => {
     async function loadInitialData() {
       setIsLoadingData(true);
-      await ensureDataLoaded();
-      setAllContent([...availableContentItems]);
+      try {
+        const contentItems = await getContentItems();
+        setAllContent(contentItems);
 
-      if (isEditMode && playlistId) {
-        const existingPlaylist = mockPlaylists.find(p => p.id === playlistId);
-        if (existingPlaylist) {
-          form.reset({
-            name: existingPlaylist.name,
-            description: existingPlaylist.description || "",
-            itemIds: existingPlaylist.items.map(item => item.id),
-          });
-          setPlaylistItems([...existingPlaylist.items]);
-        } else {
-           toast({ title: "Error", description: "Playlist not found.", variant: "destructive" });
+        if (isEditMode && playlistId) {
+          const existingPlaylist = await getPlaylist(playlistId);
+          if (existingPlaylist) {
+            form.reset({
+              name: existingPlaylist.name,
+              description: existingPlaylist.description || "",
+              itemIds: existingPlaylist.items.map(item => item.id),
+            });
+            setPlaylistItems(existingPlaylist.items);
+          } else {
+            toast({ title: "Error", description: "Playlist not found.", variant: "destructive" });
+          }
         }
+      } catch (error) {
+        toast({ title: "Error", description: "Failed to load necessary data.", variant: "destructive" });
+      } finally {
+        setIsLoadingData(false);
       }
-      setIsLoadingData(false);
     }
     loadInitialData();
   }, [isEditMode, playlistId, form, toast]);

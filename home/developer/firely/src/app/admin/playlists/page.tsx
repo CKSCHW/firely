@@ -1,7 +1,7 @@
 
 "use client";
 import Link from 'next/link';
-import { mockPlaylists, ensureDataLoaded, availableContentItems } from '@/data/mockData';
+import { getPlaylists } from '@/data/mockData';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -26,30 +26,28 @@ import {
 export default function PlaylistsPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [playlists, setPlaylists] = useState<Playlist[]>([]);
-  const [isDeleting, setIsDeleting] = useState(false);
+  const [isDeleting, setIsDeleting] = useState<string | null>(null);
   const { toast } = useToast();
 
-  useEffect(() => {
-    async function loadData() {
-      setIsLoading(true);
-      await ensureDataLoaded();
-      const populatedPlaylists = mockPlaylists.map(p => ({
-        ...p,
-        items: p.items.map(itemRef => {
-          if (typeof itemRef === 'string') {
-            return availableContentItems.find(ci => ci.id === itemRef);
-          }
-          return availableContentItems.find(ci => ci.id === itemRef.id) || itemRef;
-        }).filter(Boolean)
-      })) as Playlist[];
-      setPlaylists(populatedPlaylists);
+  const fetchPlaylists = useCallback(async () => {
+    setIsLoading(true);
+    try {
+      const data = await getPlaylists();
+      setPlaylists(data);
+    } catch (error) {
+      console.error("Failed to fetch playlists:", error);
+      toast({ title: "Error", description: "Could not load playlists.", variant: "destructive" });
+    } finally {
       setIsLoading(false);
     }
-    loadData();
-  }, []);
+  }, [toast]);
+
+  useEffect(() => {
+    fetchPlaylists();
+  }, [fetchPlaylists]);
 
   const handleDelete = useCallback(async (playlistId: string, playlistName: string) => {
-    setIsDeleting(true);
+    setIsDeleting(playlistId);
     try {
       const result = await deletePlaylistAction(playlistId);
       if (result.success) {
@@ -57,7 +55,7 @@ export default function PlaylistsPage() {
           title: "Playlist Deleted",
           description: `Playlist "${playlistName}" has been successfully removed.`,
         });
-        setPlaylists(prev => prev.filter(p => p.id !== playlistId));
+        await fetchPlaylists();
       } else {
         toast({
           title: "Deletion Failed",
@@ -72,9 +70,9 @@ export default function PlaylistsPage() {
         variant: "destructive",
       });
     } finally {
-      setIsDeleting(false);
+      setIsDeleting(null);
     }
-  }, [toast, setPlaylists]);
+  }, [toast, fetchPlaylists]);
 
   if (isLoading) {
     return (
@@ -158,7 +156,7 @@ export default function PlaylistsPage() {
                 </Button>
                 <AlertDialog>
                   <AlertDialogTrigger asChild>
-                    <Button variant="destructive" size="sm" disabled={isDeleting}>
+                    <Button variant="destructive" size="sm" disabled={!!isDeleting}>
                       <Trash2 className="mr-1.5 h-4 w-4" /> Delete
                     </Button>
                   </AlertDialogTrigger>
@@ -170,9 +168,9 @@ export default function PlaylistsPage() {
                       </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>
-                      <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
-                      <AlertDialogAction onClick={() => handleDelete(playlist.id, playlist.name)} disabled={isDeleting}>
-                        {isDeleting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                      <AlertDialogCancel disabled={!!isDeleting}>Cancel</AlertDialogCancel>
+                      <AlertDialogAction onClick={() => handleDelete(playlist.id, playlist.name)} disabled={!!isDeleting}>
+                        {isDeleting === playlist.id && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                         Delete
                       </AlertDialogAction>
                     </AlertDialogFooter>

@@ -2,7 +2,7 @@
 'use server';
 
 import { z } from 'zod';
-import { addMockContentItem, updateMockContentItem } from '@/data/mockData';
+import { addContentItem, updateContentItem, deleteContentItem } from '@/data/mockData';
 import type { ContentItem } from '@/lib/types';
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
@@ -53,7 +53,7 @@ export async function createContentItemAction(values: ContentItemFormValues) {
         dataAiHint: values.dataAiHint || undefined,
         pageImageUrls: values.pageImageUrls,
     };
-    await addMockContentItem(contentData);
+    await addContentItem(contentData);
   } catch (error) {
     console.error("Error creating content item action:", error);
     return { success: false, message: error instanceof Error ? error.message : 'Content item creation failed.' };
@@ -88,7 +88,7 @@ export async function updateContentItemAction(contentId: string, values: Content
         dataAiHint: values.dataAiHint || undefined,
         pageImageUrls: values.pageImageUrls,
     };
-    const result = await updateMockContentItem(contentId, contentData);
+    const result = await updateContentItem(contentId, contentData);
     if (!result) {
       return { success: false, message: 'Content item not found or update failed.' };
     }
@@ -99,4 +99,20 @@ export async function updateContentItemAction(contentId: string, values: Content
   revalidatePath('/admin/content');
   revalidatePath(`/admin/content/${contentId}/edit`);
   redirect('/admin/content');
+}
+
+export async function deleteContentItemAction(contentId: string) {
+  try {
+    const success = await deleteContentItem(contentId);
+    if (!success) {
+      return { success: false, message: 'Content item not found or deletion failed.' };
+    }
+  } catch (error) {
+    console.error("Error deleting content item action:", error);
+    return { success: false, message: error instanceof Error ? error.message : 'An unexpected error occurred during content item deletion.' };
+  }
+
+  revalidatePath('/admin/content');
+  revalidatePath('/admin/playlists'); // Revalidate playlists as they may have changed
+  return { success: true };
 }

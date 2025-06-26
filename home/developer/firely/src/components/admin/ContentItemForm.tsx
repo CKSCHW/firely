@@ -19,7 +19,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { availableContentItems, ensureDataLoaded } from "@/data/mockData";
+import { getContentItem } from "@/data/mockData";
 import type { ContentItem } from "@/lib/types";
 import { useEffect, useState, useCallback } from "react";
 import { UploadCloud, Loader2 } from "lucide-react";
@@ -79,29 +79,33 @@ export default function ContentItemForm({ contentId }: ContentItemFormProps) {
   useEffect(() => {
     async function loadInitialData() {
       setIsLoadingData(true);
-      await ensureDataLoaded(); 
-
       if (isEditMode && contentId) {
-        const existingContentItem = availableContentItems.find(c => c.id === contentId);
-        if (existingContentItem) {
-          form.reset({
-            title: existingContentItem.title || "",
-            type: existingContentItem.type,
-            url: existingContentItem.url, 
-            duration: existingContentItem.duration,
-            dataAiHint: existingContentItem.dataAiHint || "",
-            pageImageUrls: existingContentItem.pageImageUrls || [],
-          });
-          setCurrentPersistedUrl(existingContentItem.url);
-          if (existingContentItem.type === 'image' && existingContentItem.url) {
-            setPreviewUrl(existingContentItem.url);
+        try {
+          const existingContentItem = await getContentItem(contentId);
+          if (existingContentItem) {
+            form.reset({
+              title: existingContentItem.title || "",
+              type: existingContentItem.type,
+              url: existingContentItem.url, 
+              duration: existingContentItem.duration,
+              dataAiHint: existingContentItem.dataAiHint || "",
+              pageImageUrls: existingContentItem.pageImageUrls || [],
+            });
+            setCurrentPersistedUrl(existingContentItem.url);
+            if (existingContentItem.type === 'image' && existingContentItem.url) {
+              setPreviewUrl(existingContentItem.url);
+            }
+          } else {
+            toast({ title: "Error", description: "Content item not found.", variant: "destructive" });
           }
+        } catch (error) {
+          toast({ title: "Error", description: "Failed to load content item data.", variant: "destructive" });
         }
       }
       setIsLoadingData(false);
     }
     loadInitialData();
-  }, [isEditMode, contentId, form]);
+  }, [isEditMode, contentId, form, toast]);
 
 
   useEffect(() => {
@@ -116,69 +120,20 @@ export default function ContentItemForm({ contentId }: ContentItemFormProps) {
     setIsProcessing(true);
     toast({ title: "Processing PDF", description: "Uploading original and converting pages. This might take a moment..." });
     
-    // Step 1: Upload original PDF to get its URL for storage/reference
     const pdfFormData = new FormData();
     pdfFormData.append('file', file);
     try {
         const pdfUploadResponse = await fetch('/api/upload', { method: 'POST', body: pdfFormData });
         const pdfUploadResult = await pdfUploadResponse.json();
         if (!pdfUploadResult.success) throw new Error(pdfUploadResult.error || 'Failed to upload original PDF.');
+        
         form.setValue('url', pdfUploadResult.url, { shouldDirty: true });
-        toast({ title: "Original PDF Uploaded", description: "Now converting pages to images..." });
+        form.setValue('pageImageUrls', pdfUploadResult.pageImageUrls || [], { shouldDirty: true, shouldValidate: true });
+
+        toast({ title: "Success", description: `PDF processed successfully into ${pdfUploadResult.pageImageUrls?.length || 0} pages.` });
     } catch(e) {
-        toast({ title: "Error", description: `Failed to upload original PDF: ${e instanceof Error ? e.message : String(e)}`, variant: "destructive" });
-        setIsProcessing(false);
-        setFileInputKey(Date.now());
-        return;
-    }
-
-    // Step 2: Process PDF to images on the client
-    try {
-        const fileReader = new FileReader();
-        fileReader.onload = async (event) => {
-            if (!event.target?.result) {
-                throw new Error("Could not read the PDF file.");
-            }
-            try {
-                const typedarray = new Uint8Array(event.target.result as ArrayBuffer);
-                const pdf = await pdfjs.getDocument(typedarray).promise;
-
-                const pageImageUrls: string[] = [];
-                for (let i = 1; i <= pdf.numPages; i++) {
-                    const page = await pdf.getPage(i);
-                    const viewport = page.getViewport({ scale: 1.5 }); // Use a reasonable scale
-                    const canvas = document.createElement('canvas');
-                    canvas.width = viewport.width;
-                    canvas.height = viewport.height;
-                    const context = canvas.getContext('2d');
-                    if (!context) throw new Error("Could not get canvas context");
-                    
-                    await page.render({ canvasContext: context, viewport: viewport }).promise;
-
-                    const blob = await new Promise<Blob | null>(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.9));
-                    if (!blob) throw new Error(`Failed to create blob for page ${i}`);
-                    
-                    const imageFile = new File([blob], `page_${i}_from_${file.name}.jpg`, { type: 'image/jpeg' });
-                    const imageFormData = new FormData();
-                    imageFormData.append('file', imageFile);
-
-                    const res = await fetch('/api/upload', { method: 'POST', body: imageFormData });
-                    const result = await res.json();
-                    if (!result.success) throw new Error(`Failed to upload page ${i}: ${result.error}`);
-                    pageImageUrls.push(result.url);
-                }
-                form.setValue('pageImageUrls', pageImageUrls, { shouldDirty: true, shouldValidate: true });
-                toast({ title: "Success", description: `PDF processed successfully into ${pageImageUrls.length} pages.` });
-            } catch (e) {
-                 toast({ title: "PDF Conversion Error", description: `An error occurred while converting pages: ${e instanceof Error ? e.message : String(e)}`, variant: "destructive" });
-            } finally {
-                setIsProcessing(false);
-                setFileInputKey(Date.now());
-            }
-        }
-        fileReader.readAsArrayBuffer(file);
-    } catch (e) {
-        toast({ title: "PDF Reading Error", description: e instanceof Error ? e.message : String(e), variant: "destructive" });
+        toast({ title: "Error", description: `Failed to process PDF: ${e instanceof Error ? e.message : String(e)}`, variant: "destructive" });
+    } finally {
         setIsProcessing(false);
         setFileInputKey(Date.now());
     }
@@ -314,7 +269,7 @@ export default function ContentItemForm({ contentId }: ContentItemFormProps) {
                 </SelectContent>
               </Select>
               <FormDescription className="font-body">
-                Select the type of content. PDFs will be converted to images in your browser upon upload.
+                Select the type of content. PDFs will be converted to images on the server upon upload.
               </FormDescription>
               <FormMessage />
             </FormItem>

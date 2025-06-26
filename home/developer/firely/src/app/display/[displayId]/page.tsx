@@ -4,7 +4,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import Image from 'next/image';
 import type { Playlist, ContentItem, DisplayDevice } from '@/lib/types';
-import { mockPlaylists, mockDevices, availableContentItems, ensureDataLoaded } from '@/data/mockData';
+import { getPlaylist, getDevice, getContentItems } from '@/data/mockData';
 import { ArrowLeftCircle, ArrowRightCircle, Loader2, AlertTriangle, EyeOff, Tv2, FileWarning, Maximize, Minimize } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { updateDeviceHeartbeatAction } from '@/app/admin/devices/actions';
@@ -24,9 +24,7 @@ function timeToMinutes(timeStr: string): number { // HH:MM
 }
 
 async function getActivePlaylistForDisplay(displayId: string): Promise<Playlist | null> {
-  await ensureDataLoaded(); 
-  
-  const device = mockDevices.find(d => d.id === displayId);
+  const device = await getDevice(displayId);
   if (!device) {
     console.error(`[Display ${displayId}] Device configuration not found.`);
     return null;
@@ -65,22 +63,14 @@ async function getActivePlaylistForDisplay(displayId: string): Promise<Playlist 
   }
   console.log(`[Display ${displayId}] Determined active playlist ID: ${activePlaylistId}`);
 
-  const playlistFromMock = mockPlaylists.find(p => p.id === activePlaylistId);
-  if (!playlistFromMock) {
-    console.error(`[Display ${displayId}] Playlist with ID ${activePlaylistId} not found in mockPlaylists.`);
+  const playlist = await getPlaylist(activePlaylistId);
+  if (!playlist) {
+    console.error(`[Display ${displayId}] Playlist with ID ${activePlaylistId} not found.`);
     return null;
   }
-
-  const populatedItems = playlistFromMock.items.map(itemRefOrItem => {
-    const fullItem = availableContentItems.find(ci => ci.id === (typeof itemRefOrItem === 'string' ? itemRefOrItem : itemRefOrItem.id));
-    if (!fullItem) {
-      console.warn(`[Display ${displayId}] Content item with ID ${(typeof itemRefOrItem === 'string' ? itemRefOrItem : itemRefOrItem.id)} not found for playlist ${activePlaylistId}.`);
-    }
-    return fullItem;
-  }).filter(Boolean) as ContentItem[];
-
-
-  return { ...playlistFromMock, items: populatedItems };
+  
+  // The getPlaylist function from the new data layer should return items already populated
+  return playlist;
 }
 
 
@@ -121,15 +111,9 @@ export default function DisplayPage() {
     };
     document.addEventListener('visibilitychange', handleVisibilityChange);
 
-    const handleBeforeUnload = async () => {
-        console.log(`[Display ${displayId}] Attempting to signal offline on unload.`);
-    };
-    window.addEventListener('beforeunload', handleBeforeUnload);
-
     return () => {
       clearInterval(heartbeatInterval);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
-      window.removeEventListener('beforeunload', handleBeforeUnload);
       console.log(`[Display ${displayId}] Heartbeat interval cleared.`);
     };
   }, [displayId, sendHeartbeat]);
@@ -140,9 +124,8 @@ export default function DisplayPage() {
   }, []);
 
   useEffect(() => {
-    // Check if running in a browser environment before accessing document
     if (typeof document !== 'undefined') {
-      setIsFullscreen(!!document.fullscreenElement); // Initial check
+      setIsFullscreen(!!document.fullscreenElement); 
       document.addEventListener('fullscreenchange', handleFullscreenChange);
       return () => {
         document.removeEventListener('fullscreenchange', handleFullscreenChange);
@@ -189,8 +172,9 @@ export default function DisplayPage() {
       } else if (data && data.items.length === 0) {
         setError(`Aktive Playlist "${data.name}" ist leer. Bitte Inhalt hinzufügen oder Zeitplan prüfen.`);
         console.warn(`[Display ${displayId}] Active playlist "${data.name}" is empty.`);
+        setPlaylist(null);
       } else {
-        const deviceExists = mockDevices.some(d => d.id === displayId);
+        const deviceExists = await getDevice(displayId);
         if (!deviceExists) {
           setError(`Display ID "${displayId}" nicht gefunden. Playlist kann nicht geladen werden.`);
           console.error(`[Display ${displayId}] Display ID configuration not found.`);
@@ -198,6 +182,7 @@ export default function DisplayPage() {
            setError("Keine aktive Playlist für dieses Display gefunden. Gerätezeitplan und Standardkonfiguration prüfen.");
            console.warn(`[Display ${displayId}] No active playlist could be determined.`);
         }
+        setPlaylist(null);
       }
     } catch (e) {
       console.error(`[Display ${displayId}] Error fetching playlist data:`, e);
@@ -235,13 +220,10 @@ export default function DisplayPage() {
       return;
     }
     
-    // Calculate the correct duration for the timer
     let timerDuration;
     if (currentItem.type === 'pdf' && currentItem.pageImageUrls && currentItem.pageImageUrls.length > 0) {
-      // For PDFs, total duration is duration-per-page * number-of-pages
       timerDuration = (currentItem.duration || 10) * currentItem.pageImageUrls.length * 1000;
     } else {
-      // For all other content types
       timerDuration = (currentItem.duration || 10) * 1000;
     }
     
