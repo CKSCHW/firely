@@ -4,7 +4,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import Image from 'next/image';
 import type { Playlist, ContentItem, DisplayDevice } from '@/lib/types';
-import { getPlaylist, getDevice, getContentItems } from '@/data/mockData';
+import { getPlaylist, getDevice } from '@/data/mockData';
 import { ArrowLeftCircle, ArrowRightCircle, Loader2, AlertTriangle, EyeOff, Tv2, FileWarning, Maximize, Minimize } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { updateDeviceHeartbeatAction } from '@/app/admin/devices/actions';
@@ -222,8 +222,10 @@ export default function DisplayPage() {
     
     let timerDuration;
     if (currentItem.type === 'pdf' && currentItem.pageImageUrls && currentItem.pageImageUrls.length > 0) {
+      // The duration is per-page, so the total time for the item is duration * page count
       timerDuration = (currentItem.duration || 10) * currentItem.pageImageUrls.length * 1000;
     } else {
+      // For all other types, duration is the total time
       timerDuration = (currentItem.duration || 10) * 1000;
     }
     

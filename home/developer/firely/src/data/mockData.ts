@@ -1,6 +1,4 @@
 
-'use server';
-
 import type { Playlist, DisplayDevice, ContentItem, ScheduleEntry } from '@/lib/types';
 import { db, isFirebaseConfigured } from '@/lib/firebase'; 
 import { collection, doc, setDoc, getDoc, getDocs, deleteDoc, writeBatch, query, updateDoc, deleteField } from 'firebase/firestore';
@@ -43,7 +41,16 @@ export async function getPlaylists(): Promise<Playlist[]> {
   if (!isFirebaseConfigured) return [];
   const q = query(collection(db, 'playlists'));
   const snapshot = await getDocs(q);
-  return snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id })) as Playlist[];
+  const playlistsData = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as Playlist & { itemIds: string[] }));
+
+  // Populate items for each playlist
+  const allContentItems = await getContentItems();
+  const contentMap = new Map(allContentItems.map(item => [item.id, item]));
+
+  return playlistsData.map(playlist => ({
+    ...playlist,
+    items: (playlist.itemIds || []).map(id => contentMap.get(id)).filter(Boolean) as ContentItem[]
+  }));
 }
 
 export async function getPlaylist(id: string): Promise<Playlist | null> {
@@ -52,9 +59,14 @@ export async function getPlaylist(id: string): Promise<Playlist | null> {
   const docSnap = await getDoc(docRef);
   if (!docSnap.exists()) return null;
   
-  // The data from Firestore has item references, not populated items. We return as is.
-  // The consumer of this function, if it needs populated items, must do it.
-  return { ...docSnap.data(), id: docSnap.id } as Playlist;
+  const playlistData = { ...docSnap.data(), id: docSnap.id } as Playlist & { itemIds: string[] };
+
+  const allContentItems = await getContentItems();
+  const contentMap = new Map(allContentItems.map(item => [item.id, item]));
+  
+  playlistData.items = (playlistData.itemIds || []).map(itemId => contentMap.get(itemId)).filter(Boolean) as ContentItem[];
+  
+  return playlistData;
 }
 
 
@@ -77,19 +89,18 @@ export async function getDevice(id: string): Promise<DisplayDevice | null> {
 export async function addContentItem(itemData: Omit<ContentItem, 'id'>): Promise<ContentItem> {
   if (!isFirebaseConfigured) throw new Error("Firebase not configured");
   const docRef = doc(collection(db, 'contentItems'));
-  const newItem: ContentItem = { id: docRef.id, ...itemData };
+  const newItem: Omit<ContentItem, 'id'> = { ...itemData };
   await setDoc(docRef, cleanForFirestore(newItem));
-  return newItem;
+  return { ...newItem, id: docRef.id };
 }
 
 export async function addPlaylist(name: string, description: string | undefined, itemIds: string[]): Promise<Playlist> {
   if (!isFirebaseConfigured) throw new Error("Firebase not configured");
-  const itemRefs = itemIds.map(id => doc(db, 'contentItems', id));
 
-  const newPlaylistData: Omit<Playlist, 'id' | 'items'> & { items: any[] } = {
+  const newPlaylistData = {
     name,
     description,
-    items: itemIds, // Store array of IDs, not full objects
+    itemIds: itemIds, // Store array of IDs, not full objects
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   };
@@ -109,15 +120,14 @@ export async function addDevice(deviceId: string, name: string): Promise<{ succe
   if (docSnap.exists()) {
     return { success: false, message: `Device with ID "${deviceId}" already exists.` };
   }
-  const newDevice: DisplayDevice = {
-    id: deviceId,
+  const newDevice: Omit<DisplayDevice, 'id'> = {
     name,
     status: 'offline',
     lastSeen: new Date(0).toISOString(),
     schedule: [],
   };
   await setDoc(docRef, cleanForFirestore(newDevice));
-  return { success: true, device: newDevice };
+  return { success: true, device: { ...newDevice, id: deviceId } };
 }
 
 // --- UPDATE Functions ---
@@ -127,8 +137,9 @@ export async function updateContentItem(contentId: string, itemData: Partial<Omi
     const itemRef = doc(db, 'contentItems', contentId);
     await updateDoc(itemRef, cleanForFirestore(itemData));
     
-    // We don't need to update playlists here because they store items by value, not reference.
     // When a playlist is loaded, it fetches the latest content item data.
+    // However, if we want to ensure data consistency across the app after an update,
+    // we might need to trigger re-fetches on playlist pages. `revalidatePath` handles this.
     
     return getContentItem(contentId);
 }
